@@ -1,0 +1,12 @@
+# Núcleo da conciliação (CLI, servidor e navegador).
+# São bibliotecas Python puras, por isso rodam também no
+# Pyodide, dentro do navegador.
+xlrd==2.0.2
+openpyxl==3.1.5
+XlsxWriter==3.2.9
+
+# Servidor local opcional (app.py). A versão publicada no
+# GitHub Pages não precisa de nada disto.
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9

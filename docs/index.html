@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conciliação Financeira</title>
+<meta name="description" content="Conciliação de extrato BRB, francesinha Bolepix e arquivo de retorno DCB, processada no próprio navegador.">
+<meta name="theme-color" content="#003D6B">
+<link rel="icon" href="marca.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topo">
+  <div class="faixa">
+
+    <div class="identidade">
+      <img class="marca" src="terracap_logo_big.png"
+           alt="Terracap — Companhia Imobiliária de Brasília" width="256" height="56">
+      <div class="titulo-app">
+        <p class="sobrancelha">Companhia Imobiliária de Brasília</p>
+        <h1>Conciliação Financeira</h1>
+      </div>
+    </div>
+
+    <div class="identidade-direita">
+      <div class="linha-topo">
+        <p class="coordenadas">15&deg;47'38"S&nbsp;&nbsp;47&deg;55'40"O &middot; BRASÍLIA &middot; DF</p>
+        <button id="botao-tema" type="button" class="tema"
+                title="Alternar tema claro e escuro" aria-live="polite">
+          <svg class="icone-sol" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4.2"/>
+            <path d="M12 2.5v2.6M12 18.9v2.6M21.5 12h-2.6M5.1 12H2.5
+                     M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8
+                     M18.7 18.7l-1.8-1.8M7.1 7.1L5.3 5.3"/>
+          </svg>
+          <svg class="icone-lua" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2z"/>
+          </svg>
+          <span id="tema-texto">Tema escuro</span>
+        </button>
+      </div>
+      <div id="estado-runtime" class="carimbo carimbo-estudo">
+        <span class="pulso"></span>
+        <span id="estado-texto">Carregando o motor de cálculo</span>
+      </div>
+    </div>
+
+  </div>
+</header>
+
+<div class="divisor-eixo" role="presentation">
+  <span class="eixo"></span>
+  <img class="marca-divisor" src="marca.png" alt="" width="47" height="56">
+  <span class="eixo"></span>
+</div>
+
+<main>
+  <!--
+  <p class="manifesto">
+    Do extrato ao arquivo de retorno &mdash; a jornada de cada
+    centavo recebido, conferida item a item.
+  </p>
+  -->
+  
+
+  <section class="moldura privacidade revelar">
+    <p>
+      <strong>Seus arquivos não saem deste computador.</strong>
+      O cálculo roda inteiramente dentro do navegador: não há
+      servidor, upload nem armazenamento dos dados.
+    </p>
+  </section>
+
+  <section class="moldura revelar">
+    <p class="sobrancelha-secao">01 &mdash; Entrada</p>
+    <h2>Os arquivos do dia</h2>
+
+    <div class="grade-arquivos">
+
+      <label class="caixa-arquivo" data-campo="extrato">
+        <input type="file" accept=".txt,.text" hidden>
+        <span class="codigo">EXTRATO / BRB</span>
+        <span class="rotulo">Extrato bancário</span>
+        <span class="formato">TXT do Internet Banking</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo" data-campo="francesinha">
+        <input type="file" accept=".xls,.xlsx,.xlt,.txt,.csv" hidden>
+        <span class="codigo">FRANCESINHA / BOLEPIX</span>
+        <span class="rotulo">Recebimentos PIX</span>
+        <span class="formato">Relatório Extrato/Devolução (XLS)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo" data-campo="dcb">
+        <input type="file" accept=".txt,.ret,.xls,.xlsx" hidden>
+        <span class="codigo">DCB / RETORNO</span>
+        <span class="rotulo">Arquivo de retorno</span>
+        <span class="formato">CNAB 400 (TXT)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo opcional" data-campo="bolebarras">
+        <input type="file" accept=".xls,.xlsx,.xlt,.txt,.csv" hidden>
+        <span class="codigo">FRANCESINHA / BOLEBARRAS</span>
+        <span class="rotulo">Cobrança por código de barras</span>
+        <span class="formato">Opcional</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+    </div>
+
+    <div class="acoes">
+      <button id="botao-conciliar" type="button" disabled>Conciliar</button>
+      <button id="botao-limpar" type="button" class="secundario">Limpar</button>
+      <span id="mensagem" class="mensagem"></span>
+    </div>
+  </section>
+
+  <div id="resultado" hidden>
+
+    <div id="avisos"></div>
+
+    <section class="moldura">
+      <div class="cabecalho-secao">
+        <div>
+          <p class="sobrancelha-secao">02 &mdash; Conferência</p>
+          <h2>O que entrou na conta</h2>
+        </div>
+        <button id="botao-exportar" type="button" class="secundario">
+          Baixar Excel
+        </button>
+      </div>
+
+      <div id="indicadores" class="indicadores"></div>
+    </section>
+
+    <!-- Modo satélite: a única quebra de fundo da página,
+         reservada para o momento em que a narrativa vira
+         prestação de contas. -->
+    <section class="satelite" id="cartao-divergencia" hidden>
+      <p class="sobrancelha-secao">03 &mdash; Prestação de contas</p>
+      <h2>A divergência</h2>
+      <div id="divergencia"></div>
+    </section>
+
+    <section class="moldura" id="cartao-tabelas">
+      <p class="sobrancelha-secao">04 &mdash; Detalhamento</p>
+      <h2>Item a item</h2>
+
+      <div class="abas" role="tablist">
+        <button class="aba ativa" data-aba="nao-baixados" role="tab">
+          Bolepix não baixado
+        </button>
+        <button class="aba" data-aba="pix" role="tab">
+          PIX identificados
+        </button>
+        <button class="aba" data-aba="cobranca" role="tab">
+          Créditos de cobrança
+        </button>
+        <button class="aba" data-aba="ocorrencias" role="tab">
+          Ocorrências do DCB
+        </button>
+      </div>
+
+      <div class="painel" data-painel="nao-baixados"></div>
+      <div class="painel" data-painel="pix" hidden></div>
+      <div class="painel" data-painel="cobranca" hidden></div>
+      <div class="painel" data-painel="ocorrencias" hidden></div>
+    </section>
+
+  </div>
+
+  <div class="divisor-eixo" role="presentation">
+    <span class="eixo"></span>
+  <img class="marca-divisor" src="marca.png" alt="" width="47" height="56">
+  <span class="eixo"></span>
+  </div>
+
+  <section class="moldura como-funciona revelar">
+    <p class="sobrancelha-secao">05 &mdash; Método</p>
+    <h2>Como a conciliação é feita</h2>
+
+    <ol class="capitulos">
+      <li>
+        <span class="codigo">EXTRATO</span>
+        <p>
+          Soma os créditos <code>CRED PIX QR CODE DINAMICO</code>
+          (Bolepix) e <code>CREDITO COBRANCA BRB</code> (Bolebarras).
+          A soma dos dois é o <em>total de pagamentos QR Code +
+          código de barras</em>.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">BOLEPIX</span>
+        <p>
+          Lê os recebimentos PIX com o nome do pagador e confere o
+          total contra o extrato.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">DCB</span>
+        <p>
+          Lê o retorno CNAB 400 e soma os títulos liquidados
+          (valor pago maior que zero), o que dá o
+          <em>total do arquivo de retorno</em>.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">DIVERGÊNCIA</span>
+        <p>
+          Total de pagamentos menos total do arquivo de retorno,
+          com os Bolepix não baixados identificados um por um,
+          por nome e valor.
+        </p>
+      </li>
+    </ol>
+  </section>
+
+</main>
+
+<footer>
+  <div class="rodape">
+    <img class="marca-rodape" src="marca.png" alt="" width="47" height="56">
+    <div>
+      <p class="coordenadas">15&deg;47'38"S&nbsp;&nbsp;47&deg;55'40"O &middot; BRASÍLIA &middot; DF</p>
+      <p>
+        Processamento local via
+        <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a>.
+        O mesmo núcleo em Python roda no navegador, na linha de
+        comando e no servidor.
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

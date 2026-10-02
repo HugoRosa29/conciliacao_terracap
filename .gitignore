@@ -1,0 +1,15 @@
+# Arquivos financeiros: nunca versionar.
+*.ret
+DCB_*.txt
+*.xlt.xls
+Francesinha*
+Planilha*
+conciliacao_*.xlsx
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.tmp-*/
+.dist/

@@ -1,0 +1,901 @@
+/*
+ * Identidade visual "Eixos & Curvas" — Terracap.
+ *
+ * Estrutura reta de Lucio Costa (eixos, coordenadas, carimbos,
+ * tabelas monoespaçadas) suavizada pelas curvas de Niemeyer
+ * (molduras em arco, nunca ângulo reto puro).
+ *
+ * A cor comunica status antes do texto:
+ *   verde    = em ordem / confere
+ *   dourado  = atenção / em estudo
+ *   alerta   = divergência / erro
+ */
+
+:root {
+  /* Paleta extraída do ícone tricolor da Terracap. */
+  --verde: #00753C;
+  --azul: #003D6B;
+  --dourado: #C9A10D;
+  --cerrado: #A85C32;
+  --grafite: #1D2420;
+  --papel: #F5F6F2;
+  --alerta: #A3382A;
+  --azul-dado: #2C6FA8;
+
+  --superficie: #FFFFFF;
+  --borda: #DCDED6;
+  --texto: var(--grafite);
+  --texto-fraco: #5F6760;
+
+  --verde-fundo: #E6F2EB;
+  --dourado-fundo: #FAF2D9;
+  --alerta-fundo: #F8E8E5;
+  --azul-fundo: #E5EBF1;
+
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --corpo: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Consolas", ui-monospace, monospace;
+
+  /* Curva de Niemeyer: raio generoso, com um canto em arco. */
+  --arco: 4px 26px 4px 26px;
+  --pilula: 999px;
+
+  --sombra: 0 1px 2px rgba(29, 36, 32, .05),
+            0 10px 30px rgba(29, 36, 32, .06);
+  --sombra-alta: 0 4px 8px rgba(29, 36, 32, .07),
+                 0 18px 44px rgba(29, 36, 32, .12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papel: #12170F;
+    --superficie: #1A1F18;
+    --borda: #2E352C;
+    --texto: #ECEFE6;
+    --texto-fraco: #9AA394;
+
+    --verde: #3FA773;
+    --azul: #6F9ECA;
+    --dourado: #DCBB3C;
+    --cerrado: #C98258;
+    --alerta: #E08275;
+
+    --verde-fundo: #15291F;
+    --dourado-fundo: #2B2616;
+    --alerta-fundo: #2E1C1A;
+    --azul-fundo: #152130;
+
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4),
+              0 10px 30px rgba(0, 0, 0, .3);
+    --sombra-alta: 0 4px 8px rgba(0, 0, 0, .4),
+                   0 18px 44px rgba(0, 0, 0, .45);
+  }
+}
+
+:root[data-theme="dark"] {
+  --papel: #12170F;
+  --superficie: #1A1F18;
+  --borda: #2E352C;
+  --texto: #ECEFE6;
+  --texto-fraco: #9AA394;
+  --verde: #3FA773;
+  --azul: #6F9ECA;
+  --dourado: #DCBB3C;
+  --cerrado: #C98258;
+  --alerta: #E08275;
+  --verde-fundo: #15291F;
+  --dourado-fundo: #2B2616;
+  --alerta-fundo: #2E1C1A;
+  --azul-fundo: #152130;
+}
+
+* { box-sizing: border-box; }
+
+.oculto {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: 15.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--display);
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+
+/* ------------------------------------------------------------
+   Voz técnica: coordenadas, códigos, carimbos, números
+   ------------------------------------------------------------ */
+
+.coordenadas,
+.codigo,
+.carimbo,
+.indicador .valor,
+td.numero,
+th,
+code {
+  font-family: var(--mono);
+  font-variant-ligatures: none;
+}
+
+.coordenadas {
+  font-size: .72rem;
+  letter-spacing: .02em;
+  color: var(--texto-fraco);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.codigo {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--azul);
+}
+
+.sobrancelha,
+.sobrancelha-secao {
+  font-family: var(--mono);
+  font-size: .7rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--azul);
+  margin: 0 0 6px;
+}
+
+/* Carimbo: pílula de status, sempre colada a um código. */
+
+.carimbo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  border-radius: var(--pilula);
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.carimbo-andamento { color: var(--verde); background: var(--verde-fundo); }
+.carimbo-estudo { color: var(--cerrado); background: var(--dourado-fundo); }
+.carimbo-encerrado { color: var(--alerta); background: var(--alerta-fundo); }
+
+.pulso {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulsar 1.6s ease-in-out infinite;
+}
+
+.carimbo-andamento .pulso,
+.carimbo-encerrado .pulso { animation: none; }
+
+@keyframes pulsar {
+  0%, 100% { opacity: .3; }
+  50% { opacity: 1; }
+}
+
+/* ------------------------------------------------------------
+   Topo
+   ------------------------------------------------------------ */
+
+.topo {
+  background: var(--superficie);
+  padding: 22px 16px 20px;
+}
+
+.faixa {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.identidade {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Logo oficial: nunca recolorido. No tema escuro ele ganha uma
+   placa clara por trás, para o verde da marca seguir legível. */
+.marca {
+  width: auto;
+  height: 38px;
+  flex: none;
+}
+
+.titulo-app {
+  padding-left: 16px;
+  border-left: 1px solid var(--borda);
+}
+
+.topo h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: var(--texto);
+}
+
+.identidade-direita {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.linha-topo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Alternador de tema: pílula discreta, na voz técnica. */
+.tema {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  border-radius: var(--pilula);
+  border: 1px solid var(--borda);
+  background: transparent;
+  color: var(--texto-fraco);
+  font-family: var(--mono);
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.tema:hover:not(:disabled) {
+  border-color: var(--dourado);
+  color: var(--cerrado);
+  background: var(--dourado-fundo);
+  box-shadow: none;
+  transform: none;
+}
+
+.tema svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Mostra o ícone do tema que o clique vai aplicar. */
+.tema .icone-lua { display: inline-block; }
+.tema .icone-sol { display: none; }
+
+:root[data-theme="dark"] .tema .icone-lua { display: none; }
+:root[data-theme="dark"] .tema .icone-sol { display: inline-block; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tema .icone-lua { display: none; }
+  :root:not([data-theme="light"]) .tema .icone-sol { display: inline-block; }
+}
+
+:root[data-theme="light"] .tema .icone-lua { display: inline-block; }
+:root[data-theme="light"] .tema .icone-sol { display: none; }
+
+/* Divisor de eixo: a linha de agrimensura que atravessa a
+   página, com a marca no ponto de cruzamento. */
+
+/* Divisor de eixo: a linha de agrimensura atravessa a página e
+   se abre no centro para a marca — o cruzamento de eixos do
+   Plano Piloto. A linha esmaece nas pontas, como um eixo que
+   continua para fora da página. */
+
+.divisor-eixo {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  max-width: 1120px;
+  margin: 16px auto;
+  padding: 0 16px;
+}
+
+.eixo {
+  position: relative;
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--borda) 16%,
+    var(--borda) 84%,
+    transparent
+  );
+}
+
+/* Marcas de agrimensura nas pontas internas do eixo. */
+.eixo::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 7px;
+  background: var(--borda);
+}
+
+.divisor-eixo .eixo:first-child::after { right: 0; }
+.divisor-eixo .eixo:last-child::after { left: 0; }
+
+.marca-divisor {
+  width: auto;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  background: none;
+}
+
+/* ------------------------------------------------------------
+   Estrutura
+   ------------------------------------------------------------ */
+
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 30px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.manifesto {
+  font-family: var(--display);
+  font-size: clamp(1.35rem, 3.4vw, 2rem);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -.025em;
+  max-width: 24ch;
+  margin: 4px 0 10px;
+  text-wrap: balance;
+}
+
+/* Moldura-curva: cantos em arco, nunca ângulo reto puro.
+   A mancha de cor no canto vira dourada no hover. */
+
+.moldura {
+  position: relative;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--arco);
+  box-shadow: var(--sombra);
+  padding: 26px;
+  transition: transform .18s ease, box-shadow .18s ease,
+              border-color .18s ease;
+}
+
+.moldura::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 34px;
+  height: 5px;
+  border-radius: 4px 0 6px 0;
+  background: var(--azul);
+  transition: background .18s ease, width .18s ease;
+}
+
+.moldura:hover {
+  border-color: var(--verde);
+  transform: translateY(-3px);
+  box-shadow: var(--sombra-alta);
+}
+
+.moldura:hover::before {
+  background: var(--dourado);
+  width: 56px;
+}
+
+.moldura h2 {
+  margin: 0 0 18px;
+  font-size: 1.22rem;
+}
+
+.cabecalho-secao {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.cabecalho-secao h2 { margin: 0; }
+
+.privacidade {
+  background: var(--verde-fundo);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.privacidade:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--verde);
+}
+
+.privacidade p { margin: 0; font-size: .92rem; }
+
+/* O [hidden] precisa vencer o display:flex, senão o bloco de
+   resultado aparece vazio antes da primeira conciliação. */
+#resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#resultado[hidden],
+[hidden] { display: none !important; }
+
+/* ------------------------------------------------------------
+   Modo satélite — a única quebra de fundo da página
+   ------------------------------------------------------------ */
+
+.satelite {
+  background: var(--azul);
+  color: #F2F5F8;
+  border-radius: var(--arco);
+  padding: 28px;
+  box-shadow: var(--sombra-alta);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px;
+}
+
+.satelite h2 { margin: 0 0 18px; font-size: 1.22rem; }
+.satelite .sobrancelha-secao { color: #9FC2DE; }
+
+/* ------------------------------------------------------------
+   Arquivos
+   ------------------------------------------------------------ */
+
+.grade-arquivos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(234px, 1fr));
+  gap: 14px;
+}
+
+.caixa-arquivo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+  border: 1.5px dashed var(--borda);
+  border-radius: var(--arco);
+  cursor: pointer;
+  background: transparent;
+  transition: border-color .18s ease, background .18s ease,
+              transform .18s ease;
+}
+
+.caixa-arquivo:hover,
+.caixa-arquivo.arrastando {
+  border-color: var(--dourado);
+  background: var(--dourado-fundo);
+  transform: translateY(-2px);
+}
+
+.caixa-arquivo:focus-within {
+  outline: 2px solid var(--dourado);
+  outline-offset: 3px;
+}
+
+.caixa-arquivo.preenchida {
+  border-style: solid;
+  border-color: var(--verde);
+  background: var(--verde-fundo);
+}
+
+.caixa-arquivo .rotulo {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: .98rem;
+  margin-top: 4px;
+}
+
+.caixa-arquivo .formato {
+  font-size: .78rem;
+  color: var(--texto-fraco);
+}
+
+.caixa-arquivo .nome {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: .73rem;
+  color: var(--texto-fraco);
+  word-break: break-all;
+}
+
+.caixa-arquivo.preenchida .nome { color: var(--verde); font-weight: 500; }
+.caixa-arquivo.preenchida .codigo { color: var(--verde); }
+
+/* ------------------------------------------------------------
+   Botões — pílula de Niemeyer
+   ------------------------------------------------------------ */
+
+.acoes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+button {
+  font-family: var(--corpo);
+  font-size: .94rem;
+  font-weight: 600;
+  padding: 11px 26px;
+  border-radius: var(--pilula);
+  border: 1.5px solid var(--verde);
+  background: var(--verde);
+  color: #fff;
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .08s,
+              box-shadow .15s;
+}
+
+button:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(0, 117, 60, .3);
+  transform: translateY(-2px);
+}
+
+button:active:not(:disabled) { transform: translateY(0); }
+
+button:focus-visible {
+  outline: 3px solid var(--dourado);
+  outline-offset: 3px;
+}
+
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+button.secundario {
+  background: transparent;
+  color: var(--verde);
+}
+
+button.secundario:hover:not(:disabled) {
+  background: var(--verde-fundo);
+}
+
+.mensagem { font-size: .88rem; color: var(--texto-fraco); }
+.mensagem.erro { color: var(--alerta); font-weight: 600; }
+
+/* ------------------------------------------------------------
+   Indicadores (KPIs)
+   ------------------------------------------------------------ */
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(214px, 1fr));
+  gap: 14px;
+}
+
+.indicador {
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--azul);
+  border-radius: 3px 18px 3px 18px;
+  padding: 15px 17px;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.indicador:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sombra);
+}
+
+.indicador .titulo {
+  font-family: var(--mono);
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--texto-fraco);
+}
+
+.indicador .valor {
+  font-family: var(--display);
+  font-size: 1.42rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em;
+  margin-top: 5px;
+}
+
+.indicador .detalhe {
+  font-size: .8rem;
+  color: var(--texto-fraco);
+  margin-top: 3px;
+}
+
+.indicador.ok { border-left-color: var(--verde); }
+.indicador.ok .valor { color: var(--verde); }
+.indicador.alerta { border-left-color: var(--dourado); }
+.indicador.alerta .valor { color: var(--cerrado); }
+
+/* ------------------------------------------------------------
+   Conta da divergência (dentro do modo satélite)
+   ------------------------------------------------------------ */
+
+.linha-conta {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .16);
+  font-family: var(--mono);
+  font-size: .92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.linha-conta:last-of-type { border-bottom: none; }
+
+.linha-conta.total {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.3rem;
+  letter-spacing: -.02em;
+  border-top: 2px solid rgba(255, 255, 255, .5);
+  border-bottom: none;
+  margin-top: 6px;
+  padding-top: 14px;
+}
+
+.satelite .selo {
+  display: block;
+  margin-top: 18px;
+  padding: 13px 18px;
+  border-radius: 3px 18px 3px 18px;
+  font-size: .89rem;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, .09);
+  border-left: 3px solid var(--dourado);
+}
+
+.satelite .selo.ok { border-left-color: #4FBF88; }
+
+/* ------------------------------------------------------------
+   Avisos
+   ------------------------------------------------------------ */
+
+.aviso {
+  border-radius: 3px 18px 3px 18px;
+  padding: 13px 18px;
+  font-size: .89rem;
+  background: var(--dourado-fundo);
+  color: var(--cerrado);
+  border-left: 3px solid var(--dourado);
+  margin-bottom: 11px;
+}
+
+.aviso.erro {
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+  border-left-color: var(--alerta);
+}
+
+/* ------------------------------------------------------------
+   Abas e tabelas — a voz cadastral
+   ------------------------------------------------------------ */
+
+.abas {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--borda);
+  margin-bottom: 16px;
+}
+
+.aba {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--texto-fraco);
+  font-weight: 500;
+  font-size: .89rem;
+  padding: 10px 15px;
+}
+
+.aba:hover:not(.ativa) {
+  color: var(--texto);
+  background: transparent;
+  transform: none;
+  box-shadow: none;
+}
+
+.aba.ativa {
+  color: var(--verde);
+  border-bottom-color: var(--verde);
+  font-weight: 600;
+}
+
+.rolagem {
+  overflow: auto;
+  max-height: 470px;
+  border: 1px solid var(--borda);
+  border-radius: 3px 18px 3px 18px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--superficie);
+  text-align: left;
+  font-family: var(--mono);
+  font-size: .68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--azul);
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--borda);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--borda);
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--dourado-fundo); }
+
+td.numero, th.numero {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vazio {
+  padding: 30px;
+  text-align: center;
+  color: var(--texto-fraco);
+  font-size: .9rem;
+}
+
+.pendente {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--cerrado);
+}
+
+/* ------------------------------------------------------------
+   Capítulos do método
+   ------------------------------------------------------------ */
+
+.capitulos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.capitulos li {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding-top: 14px;
+  border-top: 1px solid var(--borda);
+}
+
+.capitulos li:first-child { border-top: none; padding-top: 0; }
+.capitulos p { margin: 0; font-size: .92rem; }
+
+code {
+  background: var(--azul-fundo);
+  color: var(--azul);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: .84em;
+}
+
+/* ------------------------------------------------------------
+   Rodapé
+   ------------------------------------------------------------ */
+
+footer {
+  border-top: 1px solid var(--borda);
+  background: var(--superficie);
+}
+
+.rodape {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px 16px 30px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  color: var(--texto-fraco);
+  font-size: .84rem;
+}
+
+.marca-rodape { width: auto; height: 28px; flex: none; }
+.rodape p { margin: 0 0 4px; }
+footer a { color: var(--verde); }
+
+/* No tema escuro só o logo completo ganha uma placa de papel,
+   porque o texto "Terracap" é verde-escuro. O ícone sozinho
+   (dourado, azul e verde) já se lê bem no escuro, e a marca
+   oficial nunca é recolorida. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .marca {
+    background: #F5F6F2;
+    border-radius: 7px;
+    padding: 6px 10px;
+    box-sizing: content-box;
+  }
+}
+
+:root[data-theme="dark"] .marca {
+  background: #F5F6F2;
+  border-radius: 7px;
+  padding: 6px 10px;
+  box-sizing: content-box;
+}
+
+/* ------------------------------------------------------------
+   Revelar ao rolar — o conteúdo emerge do terreno
+   ------------------------------------------------------------ */
+
+.revelar {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .6s ease, transform .6s ease;
+}
+
+.revelar.visivel { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+
+  .revelar { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------
+   Telas pequenas
+   ------------------------------------------------------------ */
+
+@media (max-width: 720px) {
+  .faixa { gap: 14px; }
+  .identidade-direita { align-items: flex-start; }
+  .manifesto { max-width: none; }
+  .moldura, .satelite { padding: 20px; }
+  .capitulos li { grid-template-columns: 1fr; gap: 6px; }
+  .acoes button { flex: 1 1 auto; }
+}
