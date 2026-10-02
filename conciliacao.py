@@ -31,7 +31,7 @@ from collections import Counter
 from decimal import Decimal
 import re
 
-from conciliacao_terracap.planilhas import (
+from planilhas import (
     celula,
     e_planilha,
     ler_planilha,

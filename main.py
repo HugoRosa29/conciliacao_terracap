@@ -26,7 +26,7 @@ from pathlib import Path
 import argparse
 import sys
 
-from conciliacao_terracap.conciliacao import conciliar, formatar_moeda
+from conciliacao import conciliar, formatar_moeda
 
 
 LARGURA = 72
@@ -290,7 +290,7 @@ def main(argv=None):
     gerar_relatorio(resultado)
 
     if argumentos.excel:
-        from conciliacao_terracap.exportar import montar_planilha
+        from exportar import montar_planilha
 
         destino = Path(argumentos.excel)
         destino.write_bytes(montar_planilha(resultado))

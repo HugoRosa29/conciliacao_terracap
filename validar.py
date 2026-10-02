@@ -21,7 +21,7 @@ from pathlib import Path
 from decimal import Decimal
 import sys
 
-from conciliacao_terracap.conciliacao import conciliar, formatar_moeda
+from conciliacao import conciliar, formatar_moeda
 
 
 PASTA_PADRAO = Path(__file__).resolve().parent.parent / "PROMPT"

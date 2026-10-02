@@ -13,8 +13,8 @@ from datetime import datetime
 from decimal import Decimal
 import json
 
-from conciliacao_terracap.conciliacao import conciliar
-from conciliacao_terracap.exportar import montar_planilha
+from conciliacao import conciliar
+from exportar import montar_planilha
 
 
 # Último resultado processado, usado pela exportação.

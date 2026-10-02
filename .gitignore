@@ -1,9 +1,14 @@
 # Arquivos financeiros: nunca versionar.
+# Os padrões abaixo são presos à extensão de planilha/texto de
+# propósito: "Planilha*" sozinho casaria com planilhas.py, que é
+# código do projeto (o Git no Windows ignora maiúsculas).
 *.ret
 DCB_*.txt
 *.xlt.xls
-Francesinha*
-Planilha*
+Francesinha*.xls
+Francesinha*.xlsx
+Planilha*.xls
+Planilha*.xlsx
 conciliacao_*.xlsx
 
 __pycache__/

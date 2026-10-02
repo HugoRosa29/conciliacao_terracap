@@ -24,8 +24,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from conciliacao_terracap.conciliacao import conciliar
-from conciliacao_terracap.exportar import montar_planilha
+from conciliacao import conciliar
+from exportar import montar_planilha
 
 
 PASTA = Path(__file__).resolve().parent
