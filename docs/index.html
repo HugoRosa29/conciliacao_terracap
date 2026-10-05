@@ -113,6 +113,30 @@
         <span class="nome">Clique ou arraste o arquivo</span>
       </label>
 
+      <label class="caixa-arquivo opcional" data-campo="gir">
+        <input type="file" accept=".pdf" hidden>
+        <span class="codigo">GIR / PAGAMENTOS</span>
+        <span class="rotulo">Relatório do GIR</span>
+        <span class="formato">Relação de Parcelas Lidas (PDF)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo opcional" data-campo="ggr">
+        <input type="file" accept=".pdf" hidden>
+        <span class="codigo">GGR / PAGAMENTOS</span>
+        <span class="rotulo">Relatório do GGR</span>
+        <span class="formato">Baixas Efetivadas Normalmente (PDF)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo opcional" data-campo="gop">
+        <input type="file" accept=".pdf" hidden>
+        <span class="codigo">GOP / PAGAMENTOS</span>
+        <span class="rotulo">Relatório do GOP</span>
+        <span class="formato">Baixas Efetivadas Normalmente (PDF)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
       <label class="caixa-arquivo" data-campo="francesinha">
         <input type="file" accept=".xls,.xlsx,.xlt,.txt,.csv" hidden>
         <span class="codigo">FRANCESINHA / BOLEPIX</span>
@@ -129,6 +153,14 @@
         <span class="nome">Clique ou arraste o arquivo</span>
       </label>
 
+      <label class="caixa-arquivo opcional" data-campo="benner">
+        <input type="file" accept=".xlt,.xls,.xlsx,.xltx" hidden>
+        <span class="codigo">OPCIONAL / BENNER</span>
+        <span class="rotulo">Integração GAI para BENNER</span>
+        <span class="formato">Cruza com Parcelas Lidas do GAI (XLT/XLS/XLSX)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
     </div>
 
     <p class="nota-entrada">
@@ -136,7 +168,9 @@
       arquivos dela chegam. A Bolebarra é conferida com o DCB e
       com o GAI pelo nosso número de cada título, sem depender do
       extrato. Os dois PDFs do GAI se identificam sozinhos, então
-      não há como trocá-los de lugar.
+      não há como trocá-los de lugar. GIR, GGR e GOP são conferidos
+      com o DCB e a Bolebarra pelo boleto e pela data do pagamento.
+      Nessas tabelas, são exibidos somente pagamentos com valor positivo.
     </p>
 
     <div class="acoes">
@@ -190,6 +224,15 @@
         <button class="aba" data-aba="gai-motivos" role="tab">
           Motivos do GAI
         </button>
+        <button class="aba" data-aba="gai-benner" role="tab">
+          GAI x BENNER
+        </button>
+        <button class="aba" data-aba="sistemas" role="tab">
+          GIR / GGR / GOP
+        </button>
+        <button class="aba" data-aba="bolebarra-sistemas" role="tab">
+          Bolebarra x sistemas
+        </button>
         <button class="aba" data-aba="pix" role="tab">
           PIX identificados
         </button>
@@ -205,6 +248,9 @@
       <div class="painel" data-painel="bolebarra-dcb" hidden></div>
       <div class="painel" data-painel="nao-baixados" hidden></div>
       <div class="painel" data-painel="gai-motivos" hidden></div>
+      <div class="painel" data-painel="sistemas" hidden></div>
+      <div class="painel" data-painel="gai-benner" hidden></div>
+      <div class="painel" data-painel="bolebarra-sistemas" hidden></div>
       <div class="painel" data-painel="pix" hidden></div>
       <div class="painel" data-painel="cobranca" hidden></div>
       <div class="painel" data-painel="ocorrencias" hidden></div>

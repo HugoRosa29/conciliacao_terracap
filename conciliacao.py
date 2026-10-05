@@ -1017,7 +1017,100 @@ def conferir_bolebarras_dcb(bolebarras, dcb):
 
 
 # ============================================================
-# 6. BOLEBARRA x RELATÓRIOS DO GAI
+# 6. QUEM É O PAGADOR DE UM REGISTRO DO GAI
+# ============================================================
+
+def _nome_comum(candidatos):
+    """
+    Escolhe o nome entre as cobranças de uma mesma alienação.
+
+    Nomes iguais, um nome só. Nomes que diferem porque o
+    relatório corta o texto em larguras diferentes contam como o
+    mesmo nome, e vale o mais completo. Nomes de verdade
+    diferentes: nenhum deles, para não pendurar um pagamento em
+    quem não o fez.
+    """
+
+    nomes = sorted(
+        {c["nome"] for c in candidatos if c.get("nome")},
+        key=len,
+        reverse=True,
+    )
+
+    if not nomes:
+        return ""
+
+    maior = normalizar_nome(nomes[0])
+
+    if all(maior.startswith(normalizar_nome(nome)) for nome in nomes):
+        return nomes[0]
+
+    return ""
+
+
+def identificar_recusados(nao_efetivadas, bolebarras):
+    """
+    Põe o nome do sacado em cada registro recusado pelo GAI.
+
+    O relatório de Baixas Não Efetivadas não traz nome: traz a
+    alienação, o boleto e a parcela. O nome vem da francesinha
+    Bolebarra, procurado primeiro pelo boleto e, se ali não
+    estiver, pela alienação — que é a coluna "Nº Documento" da
+    francesinha.
+
+    A busca pela alienação é o que resolve a segunda via: ela é
+    recusada com um número de boleto novo, que não existe na
+    francesinha. Foi assim que o pagamento de R$ 1.921,07 de
+    30/09/2026 ganhou dono — o boleto 827696 não está na
+    francesinha, mas a alienação 111268 está, paga pelo boleto
+    825978, de EDLEUZA GONCALVES DOS REIS.
+
+    Quem não é encontrado fica sem nome, e com razão: a maior
+    parte dos registros recusados é entrada de título, boleto
+    que ninguém pagou no dia.
+    """
+
+    por_boleto = {}
+    por_alienacao = {}
+
+    for titulo in bolebarras["registros"]:
+
+        if titulo.get("boleto"):
+            por_boleto.setdefault(titulo["boleto"], titulo)
+
+        if titulo.get("documento"):
+            por_alienacao.setdefault(titulo["documento"], []).append(titulo)
+
+    identificados = 0
+
+    for registro in nao_efetivadas["registros"]:
+
+        titulo = por_boleto.get(registro["boleto"])
+
+        if titulo is not None:
+            registro["nome"] = titulo["nome"]
+            registro["nosso_numero"] = titulo["nosso_numero"]
+            registro["origem_do_nome"] = "boleto"
+
+        else:
+            registro["nome"] = _nome_comum(
+                por_alienacao.get(registro["alienacao"], [])
+            )
+            registro["nosso_numero"] = ""
+            registro["origem_do_nome"] = (
+                "alienacao" if registro["nome"] else ""
+            )
+
+        if registro["nome"]:
+            identificados += 1
+
+    nao_efetivadas["quantidade_identificados"] = identificados
+
+    return identificados
+
+
+# ============================================================
+# 7. BOLEBARRA x RELATÓRIOS DO GAI
 # ============================================================
 
 # Por que o nosso número e não o valor: a Relação de Parcelas
@@ -1206,7 +1299,7 @@ def conferir_bolebarras_gai(bolebarras, lidas=None, nao_efetivadas=None):
 
 
 # ============================================================
-# 7. CONCILIAÇÃO COMPLETA
+# 8. CONCILIAÇÃO COMPLETA
 # ============================================================
 
 def _ler_relatorios_gai(lidas, nao_baixadas, avisos):
@@ -1265,6 +1358,10 @@ def conciliar(
     bolebarras=None,
     gai_lidas=None,
     gai_nao_baixadas=None,
+    gir=None,
+    ggr=None,
+    gop=None,
+    benner=None,
 ):
     """
     Executa a conciliação com os arquivos disponíveis.
@@ -1432,6 +1529,11 @@ def conciliar(
     for relatorio in (dados_lidas, dados_nao_baixadas):
         if relatorio is not None:
             avisos.extend(relatorio["avisos"])
+
+    # O relatório de recusas vem só com códigos. A francesinha
+    # Bolebarra dá nome a cada um que ela conhece.
+    if dados_nao_baixadas is not None and dados_bolebarras is not None:
+        identificar_recusados(dados_nao_baixadas, dados_bolebarras)
 
     if dados_lidas is not None and dados_dcb is not None:
 
@@ -1638,5 +1740,29 @@ def conciliar(
                 "Bolepix não baixados. Verifique também a cobrança "
                 "por código de barras."
             )
+
+    from sistemas import ler_sistema, cruzar_sistemas
+
+    relatorios = [
+        ler_sistema(origem, esperado=sistema)
+        for sistema, origem in (("GIR", gir), ("GGR", ggr), ("GOP", gop))
+        if origem is not None
+    ]
+    resultado["sistemas"] = relatorios
+    resultado["bolebarras_sistemas"] = (
+        cruzar_sistemas(relatorios, dados_dcb, dados_bolebarras, dados_lidas)
+        if relatorios else None
+    )
+    for relatorio in relatorios:
+        avisos.extend(relatorio["avisos"])
+
+    from benner import ler_benner, conferir_benner
+
+    resultado["benner"] = ler_benner(benner) if benner is not None else None
+    resultado["gai_benner"] = None
+    if resultado["benner"] is not None:
+        resultado["gai_benner"] = conferir_benner(dados_lidas, resultado["benner"])
+        avisos.extend(resultado["benner"]["avisos"])
+        avisos.extend(resultado["gai_benner"]["avisos"])
 
     return resultado

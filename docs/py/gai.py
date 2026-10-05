@@ -608,6 +608,13 @@ def ler_baixas_nao_efetivadas(origem):
                 ).strip(),
                 "total_pago": None,
                 "motivo": "",
+
+                # O relatório não diz quem pagou. Quem preenche
+                # é conciliacao.identificar_recusados, quando a
+                # francesinha Bolebarra vem junto.
+                "nome": "",
+                "nosso_numero": "",
+                "origem_do_nome": "",
             }
 
             registros.append(atual)
@@ -670,6 +677,7 @@ def ler_baixas_nao_efetivadas(origem):
 
         "quantidade": len(registros),
         "quantidade_com_valor": len(com_valor),
+        "quantidade_identificados": 0,
 
         "total": total,
 

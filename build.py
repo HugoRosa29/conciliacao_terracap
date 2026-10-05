@@ -26,6 +26,8 @@ DESTINO = RAIZ / "docs" / "py"
 MODULOS = (
     "planilhas.py",
     "gai.py",
+    "sistemas.py",
+    "benner.py",
     "conciliacao.py",
     "exportar.py",
     "ponte.py",

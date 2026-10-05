@@ -56,6 +56,10 @@ def descobrir(pasta):
         "bolebarras": None,
         "gai_lidas": None,
         "gai_nao_baixadas": None,
+        "gir": None,
+        "ggr": None,
+        "gop": None,
+        "benner": None,
     }
 
     for caminho in sorted(pasta.iterdir()):
@@ -68,6 +72,11 @@ def descobrir(pasta):
         if nome.startswith("dcb") and caminho.suffix.lower() == ".txt":
             achados["dcb"] = achados["dcb"] or caminho
 
+        elif "benner" in nome and caminho.suffix.lower() in (".xlt", ".xls", ".xlsx", ".xltx"):
+            if achados["benner"] is not None:
+                raise ValueError("Mais de um arquivo BENNER na pasta; selecione com --benner.")
+            achados["benner"] = caminho
+
         elif "bolepix" in nome:
             achados["francesinha"] = achados["francesinha"] or caminho
 
@@ -75,6 +84,18 @@ def descobrir(pasta):
             achados["bolebarras"] = achados["bolebarras"] or caminho
 
         elif caminho.suffix.lower() == ".pdf":
+            from pypdf import PdfReader
+            from sistemas import identificar_sistema
+
+            sistema = identificar_sistema(" ".join(
+                pagina.extract_text() or "" for pagina in PdfReader(caminho).pages
+            ))
+            if sistema:
+                campo = sistema.lower()
+                if achados[campo] is not None:
+                    raise ValueError(f"Mais de um PDF de {sistema} na pasta; selecione com --{campo}.")
+                achados[campo] = caminho
+                continue
             # Qual dos dois relatórios do GAI é cada PDF sai do
             # título impresso dentro dele, não do nome.
             if achados["gai_lidas"] is None:
@@ -152,6 +173,28 @@ def _relatar_gai(resultado):
                 f"{formatar_moeda(motivo['total']):>16}  "
                 f"{motivo['motivo'][:40]}"
             )
+
+        # As recusas que trouxeram dinheiro, com dono e
+        # alienação — o resto é entrada de título.
+        recusas = [
+            registro
+            for registro in nao_baixadas["registros"]
+            if registro["total_pago"] > 0 or registro["nome"]
+        ]
+
+        if recusas:
+            print("\n  Recusas identificadas:")
+
+            for registro in sorted(
+                recusas, key=lambda r: (-r["total_pago"], r["alienacao"])
+            ):
+                print(
+                    f"    alienação {registro['alienacao']:<8}"
+                    f" boleto {registro['boleto']:<8}"
+                    f" parcela {registro['parcela']:<5}"
+                    f"{formatar_moeda(registro['total_pago']):>14}"
+                    f"   {registro['nome'][:32] or '—'}"
+                )
 
 
 def _relatar_bolebarras_dcb(conferencia):
@@ -316,6 +359,29 @@ def gerar_relatorio(resultado):
 
     titulo("CONCILIAÇÃO FINANCEIRA")
 
+    benner = resultado.get("gai_benner")
+    if benner is not None:
+        print("\nGAI x BENNER")
+        if benner["status"] == "aguardando_gai":
+            print("  Envie a Relação de Parcelas Lidas do GAI.")
+        elif benner["status"] == "datas_incompativeis":
+            print("  Datas incompatíveis: envie arquivos do mesmo período.")
+        else:
+            linha("Parcelas não localizadas no BENNER", str(benner["quantidade_ausentes"]))
+            linha("Total não localizado", formatar_moeda(benner["total_ausente"]))
+            linha("Parcelas com valor divergente", str(benner["quantidade_divergentes"]))
+            for item in benner["ausentes"]:
+                print(f"  Alienação {item['alienacao']} | imóvel {item['imovel']}"
+                      f" | parcela {item['parcela']} | {item['data_pagamento']}"
+                      f" | {formatar_moeda(item['valor'])}")
+
+    for relatorio in resultado.get("sistemas", []):
+        print(f"\n{relatorio['sistema']} — {relatorio['quantidade']} pagamentos")
+        linha("Total pago", formatar_moeda(relatorio["total"]))
+        for item in relatorio["linhas"]:
+            print(f"  {item['boleto']}  {formatar_moeda(item['valor']):>16}"
+                  f"  DCB: {item['situacao_dcb']} | Bolebarra: {item['situacao_bolebarra']}")
+
     if extrato is not None:
         print("\nEXTRATO BRB")
         print("-" * LARGURA)
@@ -460,6 +526,10 @@ def main(argv=None):
         help="Grava o resultado em um arquivo .xlsx",
     )
 
+    for sistema in ("gir", "ggr", "gop"):
+        analisador.add_argument(f"--{sistema}", help=f"PDF do {sistema.upper()}")
+
+    analisador.add_argument("--benner", help="Planilha de integração GAI para BENNER (XLT/XLS/XLSX)")
     argumentos = analisador.parse_args(argv)
 
     if argumentos.pasta:
@@ -477,6 +547,10 @@ def main(argv=None):
             "bolebarras": argumentos.bolebarras,
             "gai_lidas": argumentos.gai_lidas,
             "gai_nao_baixadas": argumentos.gai_nao_baixadas,
+            "gir": argumentos.gir,
+            "ggr": argumentos.ggr,
+            "gop": argumentos.gop,
+            "benner": argumentos.benner,
         }
 
     arquivos = {

@@ -14,6 +14,8 @@
 const MODULOS = [
   "planilhas.py",
   "gai.py",
+  "sistemas.py",
+  "benner.py",
   "conciliacao.py",
   "exportar.py",
   "ponte.py",
@@ -32,6 +34,10 @@ const CAMPOS = [
   "bolebarras",
   "gai_lidas",
   "gai_nao_baixadas",
+  "gir",
+  "ggr",
+  "gop",
+  "benner",
   "francesinha",
   "extrato",
 ];
@@ -335,6 +341,8 @@ function desenhar(resultado) {
   desenharBolebarraDcb(resultado.bolebarras_dcb);
   desenharNaoBaixados(resultado.bolepix_dcb);
   desenharMotivosGai(resultado.gai_nao_baixadas);
+  desenharSistemas(resultado);
+  desenharBenner(resultado);
   desenharPix(resultado.pix_detalhado);
   desenharCobranca(resultado.extrato);
   desenharOcorrencias(resultado.dcb);
@@ -359,6 +367,14 @@ function desenharIndicadores(resultado) {
   const { extrato, francesinha, bolebarras, dcb, divergencia } = resultado;
 
   const cartoes = [];
+
+  for (const relatorio of resultado.sistemas || []) {
+    cartoes.push(indicador({
+      titulo: `Pagamentos no ${relatorio.sistema}`,
+      valor: formatarMoeda(relatorio.total),
+      detalhe: `${inteiro.format(relatorio.quantidade)} pagamentos com valor positivo`,
+    }));
+  }
 
   if (extrato) {
     cartoes.push(
@@ -783,26 +799,161 @@ function desenharNaoBaixados(bolepix) {
   );
 }
 
-/* O retrato do relatório de Baixas Não Efetivadas: por que o
-   GAI recusou cada pagamento. */
+/* O relatório de Baixas Não Efetivadas, recusa por recusa: o
+   motivo, a alienação e — quando a francesinha Bolebarra sabe
+   dizer — o nome de quem pagou. O relatório do GAI não traz
+   nome; ele vem da francesinha, pelo boleto ou pela alienação. */
 function desenharMotivosGai(relatorio) {
-  const linhas = (relatorio?.motivos || []).map((motivo) => ({
+  const recusas = (relatorio?.registros || []).filter(
+    (registro) => Number(registro.total_pago) > 0,
+  );
+  const porMotivo = new Map();
+  for (const registro of recusas) {
+    const motivo = registro.motivo || "—";
+    const grupo = porMotivo.get(motivo) || { motivo, quantidade: 0, centavos: 0 };
+    grupo.quantidade += 1;
+    grupo.centavos += Math.round(Number(registro.total_pago) * 100);
+    porMotivo.set(motivo, grupo);
+  }
+  const resumo = Array.from(porMotivo.values()).map((motivo) => ({
     motivo: motivo.motivo,
     quantidade: inteiro.format(motivo.quantidade),
-    total: formatarMoeda(motivo.total),
+    total: formatarMoeda(motivo.centavos / 100),
   }));
 
-  el('[data-painel="gai-motivos"]').innerHTML = tabela(
-    [
-      { titulo: "Motivo informado pelo GAI", chave: "motivo" },
-      { titulo: "Registros", chave: "quantidade", numero: true },
-      { titulo: "Total recusado", chave: "total", numero: true },
-    ],
-    linhas,
-    relatorio
-      ? "O relatório de Baixas Não Efetivadas do GAI veio sem registros."
-      : "Envie o PDF de Baixas Não Efetivadas do GAI para ver este bloco.",
-  );
+  const linhas = recusas.map((registro) => ({
+    motivo: registro.motivo || "—",
+    alienacao: registro.alienacao || "—",
+    boleto: registro.boleto || "—",
+    parcela: registro.parcela || "—",
+    nome: registro.nome
+      ? escapar(registro.nome)
+      : '<span class="pendente">não identificado</span>',
+    data: registro.data_pagamento || "—",
+    total: formatarMoeda(registro.total_pago),
+  }));
+
+  el('[data-painel="gai-motivos"]').innerHTML =
+    tabela(
+      [
+        { titulo: "Motivo informado pelo GAI", chave: "motivo" },
+        { titulo: "Recusas com valor", chave: "quantidade", numero: true },
+        { titulo: "Total recusado", chave: "total", numero: true },
+      ],
+      resumo,
+      relatorio
+        ? "Nenhuma recusa com valor positivo neste relatório."
+        : "Envie o PDF de Baixas Não Efetivadas do GAI para ver este bloco.",
+    ) +
+    (linhas.length
+      ? `<p class="nota-tabela">
+           Exibindo ${inteiro.format(linhas.length)} recusa(s) com valor
+           positivo. No relatório completo,
+           ${inteiro.format(relatorio.quantidade_identificados)} de
+           ${inteiro.format(relatorio.quantidade)} registros têm sacado
+           identificado na francesinha Bolebarra. A ausência de nome
+           indica que não foi possível identificar o sacado com os
+           arquivos enviados. Todos os registros estão no Excel.
+         </p>` +
+        tabela(
+          [
+            { titulo: "Alienação", chave: "alienacao" },
+            { titulo: "Sacado", chave: "nome", html: true },
+            { titulo: "Boleto", chave: "boleto" },
+            { titulo: "Parcela", chave: "parcela", numero: true },
+            { titulo: "Data pagamento", chave: "data" },
+            { titulo: "Valor recusado", chave: "total", numero: true },
+            { titulo: "Motivo", chave: "motivo" },
+          ],
+          linhas,
+          "",
+        )
+      : relatorio
+        ? '<p class="nota-tabela">Nenhuma recusa com valor positivo neste relatório. Todos os registros estão no Excel.</p>'
+        : "");
+}
+
+function desenharBenner(resultado) {
+  const painel = el('[data-painel="gai-benner"]');
+  const conferencia = resultado.gai_benner;
+  if (!conferencia || conferencia.status === "aguardando_gai") {
+    painel.innerHTML = '<p class="vazio">Envie a integração BENNER e o PDF de Parcelas Lidas do GAI do mesmo período para comparar.</p>';
+    return;
+  }
+  if (conferencia.status === "datas_incompativeis") {
+    painel.innerHTML = '<p class="vazio">GAI e BENNER não têm datas de pagamento em comum. Envie arquivos do mesmo período.</p>';
+    return;
+  }
+  const colunas = [
+    { titulo: "Alienação", chave: "alienacao" },
+    { titulo: "Imóvel", chave: "imovel" },
+    { titulo: "Parcela", chave: "parcela" },
+    { titulo: "Boleto GAI", chave: "boleto" },
+    { titulo: "Data pagamento", chave: "data_pagamento" },
+    { titulo: "Valor GAI", chave: "valor", numero: true },
+  ];
+  const linhas = (itens) => itens.map((r) => ({...r, valor: formatarMoeda(r.valor),
+    valor_benner: r.valor_benner == null ? "—" : formatarMoeda(r.valor_benner)}));
+  painel.innerHTML = `<p class="nota-tabela">${inteiro.format(conferencia.quantidade_ausentes)} parcela(s)
+    não localizada(s) no BENNER, total de ${formatarMoeda(conferencia.total_ausente)}.
+    ${inteiro.format(conferencia.quantidade_encontrados)} parcela(s) conferida(s).
+    A identificação usa alienação, imóvel, parcela e data de pagamento.
+    Somente parcelas com valor positivo são comparadas.</p>` +
+    tabela(colunas, linhas(conferencia.ausentes), "Nenhuma parcela ausente entre as que puderam ser comparadas.") +
+    (conferencia.divergentes.length ? '<h3>Encontradas com valor diferente</h3>' +
+      tabela([...colunas, {titulo: "Valor BENNER", chave: "valor_benner", numero: true},
+        {titulo: "Linha BENNER", chave: "linha_benner"}], linhas(conferencia.divergentes), "") : "") +
+    (conferencia.nao_comparados.length ? '<h3>Parcelas não comparadas</h3>' +
+      tabela(colunas, linhas(conferencia.nao_comparados), "") : "") +
+    (resultado.benner?.quantidade_nao_identificados ?
+      `<p class="nota-tabela">${inteiro.format(resultado.benner.quantidade_nao_identificados)} crédito(s)
+      do BENNER sem identificação completa. Revise a aba BENNER revisar do Excel antes de concluir sobre as ausências.</p>` : "");
+}
+
+function desenharSistemas(resultado) {
+  const relatorios = resultado.sistemas || [];
+  const linhas = relatorios.flatMap((relatorio) => relatorio.linhas.map((r) => ({
+    ...r,
+    nome: r.nome || "Não informado no PDF",
+    valor: formatarMoeda(r.valor),
+    valor_dcb: r.valor_dcb == null ? "—" : formatarMoeda(r.valor_dcb),
+    valor_bolebarra: r.valor_bolebarra == null ? "—" : formatarMoeda(r.valor_bolebarra),
+  })));
+  el('[data-painel="sistemas"]').innerHTML =
+    '<p class="nota-tabela">Pagamentos positivos das tabelas de GIR, GGR e GOP. ' +
+    'O cruzamento usa boleto e data de pagamento. Não encontrado na Bolebarra ' +
+    'não significa ausência de pagamento: o recebimento pode ser Bolepix.</p>' + tabela([
+      { titulo: "Sistema", chave: "sistema" },
+      { titulo: "Documento / Processo", chave: "documento" },
+      { titulo: "Contrato", chave: "contrato" },
+      { titulo: "Boleto", chave: "boleto" },
+      { titulo: "Cliente / Ocupante", chave: "nome" },
+      { titulo: "Data pagamento", chave: "data_pagamento" },
+      { titulo: "Valor pago", chave: "valor", numero: true },
+      { titulo: "DCB", chave: "situacao_dcb" },
+      { titulo: "Valor DCB", chave: "valor_dcb", numero: true },
+      { titulo: "Bolebarra", chave: "situacao_bolebarra" },
+      { titulo: "Valor Bolebarra", chave: "valor_bolebarra", numero: true },
+    ], linhas, relatorios.length ? "Nenhum pagamento com valor positivo." : "Envie um PDF do GIR, GGR ou GOP.");
+
+  const conferencia = resultado.bolebarras_sistemas;
+  const cobrancas = (conferencia?.linhas || []).map((r) => ({
+    ...r, sistema: r.sistema || "—", valor: formatarMoeda(r.valor),
+    valor_sistemas: formatarMoeda(r.valor_sistemas),
+  }));
+  el('[data-painel="bolebarra-sistemas"]').innerHTML =
+    (conferencia ? `<p class="nota-tabela">${inteiro.format(conferencia.quantidade_pendentes)} cobrança(s) pendente(s),
+      total de ${formatarMoeda(conferencia.total_pendente)}. Somente os sistemas enviados são considerados.
+      Um boleto identificado em mais de um sistema exige conferência.</p>` : "") +
+    tabela([
+      { titulo: "Boleto", chave: "boleto" },
+      { titulo: "Sacado", chave: "nome" },
+      { titulo: "Data pagamento", chave: "data_pagamento" },
+      { titulo: "Sistema", chave: "sistema" },
+      { titulo: "Valor Bolebarra", chave: "valor", numero: true },
+      { titulo: "Valor nos sistemas", chave: "valor_sistemas", numero: true },
+      { titulo: "Situação", chave: "situacao" },
+    ], cobrancas, "Envie a Francesinha Bolebarra e um PDF do GIR, GGR ou GOP para esta conferência.");
 }
 
 function desenharPix(detalhado) {

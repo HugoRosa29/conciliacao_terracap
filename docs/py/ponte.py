@@ -81,6 +81,10 @@ def para_tela(resultado):
 
     enxuto = {
         "avisos": resultado["avisos"],
+        "sistemas": resultado.get("sistemas", []),
+        "benner": resultado.get("benner"),
+        "gai_benner": resultado.get("gai_benner"),
+        "bolebarras_sistemas": resultado.get("bolebarras_sistemas"),
         "extrato": None,
         "francesinha": None,
         "bolebarras": None,
@@ -113,8 +117,34 @@ def para_tela(resultado):
         enxuto["gai_nao_baixadas"] = {
             "quantidade": nao_baixadas["quantidade"],
             "quantidade_com_valor": nao_baixadas["quantidade_com_valor"],
+            "quantidade_identificados": nao_baixadas[
+                "quantidade_identificados"
+            ],
             "total": nao_baixadas["total"],
             "motivos": nao_baixadas["motivos"],
+
+            # A tela detalha as recusas com valor positivo.
+            # Todos os registros permanecem no resumo por motivo
+            # e na exportação completa para Excel.
+            "registros": [
+                {
+                    chave: registro[chave]
+                    for chave in (
+                        "alienacao",
+                        "boleto",
+                        "parcela",
+                        "nome",
+                        "nosso_numero",
+                        "data_pagamento",
+                        "total_pago",
+                        "motivo",
+                    )
+                }
+                for registro in sorted(
+                    nao_baixadas["com_valor"],
+                    key=lambda r: (-r["total_pago"], r["alienacao"]),
+                )
+            ],
         }
 
     conferencia = resultado["bolebarras_dcb"]
@@ -270,6 +300,10 @@ def processar(arquivos):
         "bolebarras",
         "gai_lidas",
         "gai_nao_baixadas",
+        "gir",
+        "ggr",
+        "gop",
+        "benner",
     ):
 
         item = arquivos.get(rotulo)

@@ -167,12 +167,20 @@ async def api_conciliar(
     bolebarras: UploadFile = File(None),
     gai_lidas: UploadFile = File(None),
     gai_nao_baixadas: UploadFile = File(None),
+    gir: UploadFile = File(None),
+    ggr: UploadFile = File(None),
+    gop: UploadFile = File(None),
+    benner: UploadFile = File(None),
 ):
     """
     Recebe os arquivos do dia e devolve a conciliação.
     """
 
     arquivos = {
+        "gir": await receber(gir, "GIR"),
+        "ggr": await receber(ggr, "GGR"),
+        "gop": await receber(gop, "GOP"),
+        "benner": await receber(benner, "Integração BENNER"),
         "extrato": await receber(extrato, "extrato"),
         "francesinha": await receber(francesinha, "francesinha Bolepix"),
         "dcb": await receber(dcb, "DCB"),

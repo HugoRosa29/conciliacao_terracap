@@ -115,6 +115,15 @@ ESPERADO_30 = {
 
     "quantidade_bolepix_nao_baixado": 2,
     "total_bolepix_nao_baixado": Decimal("1236.91"),
+
+    # A recusa que trouxe dinheiro: segunda via do boleto da
+    # parcela 19 da alienação 111268. O número do boleto
+    # recusado não está na francesinha — o nome vem pela
+    # alienação.
+    "recusa_com_valor": Decimal("1921.07"),
+    "alienacao_da_recusa": "111268",
+    "nome_da_recusa": "EDLEUZA GONCALVES DOS REIS",
+    "recusados_identificados": 38,
 }
 
 
@@ -389,6 +398,44 @@ def validar_30(pasta):
             nao_efetivadas["total"],
             ESPERADO_30["total_nao_efetivadas"],
             moeda=True,
+        ),
+        comparar(
+            "Total = rodapé do próprio relatório",
+            nao_efetivadas["total"],
+            nao_efetivadas["rodape"]["total"],
+            moeda=True,
+        ),
+    ]
+
+    recusa = (nao_efetivadas["com_valor"] or [{}])[0]
+
+    print("\nRECUSAS COM NOME")
+    verificacoes += [
+        comparar(
+            "Recusas com dinheiro",
+            nao_efetivadas["quantidade_com_valor"],
+            1,
+        ),
+        comparar(
+            "Valor da recusa",
+            recusa.get("total_pago"),
+            ESPERADO_30["recusa_com_valor"],
+            moeda=True,
+        ),
+        comparar(
+            "Alienação da recusa",
+            recusa.get("alienacao"),
+            ESPERADO_30["alienacao_da_recusa"],
+        ),
+        comparar(
+            "Nome do pagador (vem pela alienação)",
+            recusa.get("nome"),
+            ESPERADO_30["nome_da_recusa"],
+        ),
+        comparar(
+            "Recusados com nome na francesinha",
+            nao_efetivadas["quantidade_identificados"],
+            ESPERADO_30["recusados_identificados"],
         ),
     ]
 

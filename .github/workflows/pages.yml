@@ -33,6 +33,9 @@ jobs:
       - name: Importar os módulos do núcleo
         run: python -c "import conciliacao, planilhas, gai, exportar, ponte"
 
+      - name: Testar identificação e cruzamentos
+        run: python -m unittest -v test_recusas test_sistemas test_benner
+
   publicar:
     needs: verificar
     runs-on: ubuntu-latest

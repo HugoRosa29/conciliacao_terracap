@@ -79,6 +79,61 @@ conferências acima são título por título e não dependem dele.
 
 ## Como usar
 
+### Integração opcional GAI x BENNER
+
+Carregue **Integração GAI para BENNER** (XLT/XLS/XLSX) e o PDF de
+**Parcelas Lidas do GAI** do mesmo período. A aba **GAI x BENNER**
+mostra as parcelas pagas do GAI não localizadas na integração e, separadamente,
+as encontradas com valor diferente. A identificação usa alienação, imóvel,
+parcela e data de pagamento, extraídos do histórico BENNER. Cada lançamento
+é usado uma única vez. Débitos e valores não positivos não comprovam integração.
+
+Históricos sem identificação completa ficam em **BENNER revisar** no Excel.
+Datas fora do período disponível e parcelas sem identificação ficam como
+não comparadas. Arquivos sem datas em comum não geram uma lista de ausências.
+O arquivo de integração não comprova, por si só, o processamento no BENNER.
+
+No terminal, use `--benner "Integração GAI para BENNER - Parcelas lidas.xlt"`
+junto de `--gai-lidas "Parcelas lidas.pdf"`, ou coloque ambos na pasta do dia.
+
+### GIR, GGR e GOP
+
+Envie os PDFs nos campos de cada sistema. A aba **GIR / GGR / GOP**
+confere os pagamentos com o DCB e a Francesinha Bolebarra usando o
+número do boleto e a data do pagamento, e aponta diferenças de valor.
+A aba **Bolebarra x sistemas** reúne as baixas de GAI, GIR, GGR e GOP
+que foram enviadas. Um boleto presente em mais de um sistema fica
+marcado para conferência, sem ser considerado conciliado automaticamente.
+
+As tabelas usadas são **Relação de Parcelas Lidas** no GIR e
+**Baixas de Pagamentos Efetivadas Normalmente** no GGR e GOP — as
+seções destacadas nos exemplos fornecidos. O título identifica a seção,
+então não é necessário marcar os próximos PDFs em amarelo. Para GGR e
+GOP, a Relação de Parcelas Lidas do mesmo PDF fornece o número do boleto
+a partir do documento; os valores vêm da tabela de baixas efetivadas.
+Somente pagamentos positivos entram nesses cruzamentos. Os totais são
+comparados com o rodapé da seção selecionada.
+
+O Excel inclui uma aba por sistema e a conferência conjunta da Bolebarra.
+Sem a Bolebarra, ainda é possível conferir os relatórios com o DCB.
+Não encontrar um pagamento na Bolebarra não prova ausência de recebimento:
+ele pode ter sido recebido por Bolepix.
+
+Na linha de comando, use `--gir`, `--ggr` e `--gop`, ou `--pasta` para
+reconhecer os relatórios pelo conteúdo. Exemplo:
+
+```powershell
+python main.py --pasta "C:\Users\hugos\Downloads\PROMPT\TESTE 3"
+```
+
+Os testes dos exemplos reais podem ser executados sem copiar documentos
+financeiros para o repositório:
+
+```powershell
+$env:CONCILIACAO_TESTE3 = "C:\Users\hugos\Downloads\PROMPT\TESTE 3"
+python -m unittest -v test_recusas test_sistemas
+```
+
 ### No navegador (GitHub Pages)
 
 Abra a página publicada, arraste os arquivos do dia e clique em

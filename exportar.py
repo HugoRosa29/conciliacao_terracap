@@ -310,6 +310,19 @@ def montar_planilha(resultado):
             ],
         ]
 
+    for relatorio in resultado.get("sistemas", []):
+        resumo.append([relatorio["sistema"] + " — pagamentos positivos",
+                       relatorio["quantidade"], relatorio["total"]])
+
+    benner_resumo = resultado.get("gai_benner")
+    if benner_resumo is not None:
+        estados = {"aguardando_gai": "Envie Parcelas Lidas do GAI",
+                   "datas_incompativeis": "Datas incompatíveis", "comparado": "Comparado"}
+        resumo.append(["GAI x BENNER: " + estados[benner_resumo["status"]], "", ""])
+        if benner_resumo["status"] == "comparado":
+            resumo.append(["GAI não localizado no BENNER", benner_resumo["quantidade_ausentes"], benner_resumo["total_ausente"]])
+            resumo.append(["GAI x BENNER: valor divergente", benner_resumo["quantidade_divergentes"], ""])
+
     _escrever_aba(
         livro,
         "Resumo",
@@ -317,6 +330,45 @@ def montar_planilha(resultado):
         resumo or [["Sem dados", "", ""]],
         colunas_moeda={2},
     )
+
+    # ---------- GAI x BENNER ----------
+    conferencia_benner = resultado.get("gai_benner")
+    if conferencia_benner is not None:
+        colunas_benner = ["Alienação", "Imóvel", "Parcela", "Boleto GAI", "Data pagamento", "Valor GAI"]
+        campos_benner = ("alienacao", "imovel", "parcela", "boleto", "data_pagamento", "valor")
+        if conferencia_benner["status"] == "comparado":
+            _escrever_aba(livro, "GAI ausente BENNER", colunas_benner,
+                [[r.get(k, "") for k in campos_benner] for r in conferencia_benner["ausentes"]], colunas_moeda={5})
+            _escrever_aba(livro, "GAI BENNER valores", colunas_benner + ["Valor BENNER", "Diferença", "Aba BENNER", "Linha BENNER"],
+                [[r.get(k, "") for k in campos_benner + ("valor_benner", "diferenca", "aba_benner", "linha_benner")]
+                 for r in conferencia_benner["divergentes"]], colunas_moeda={5, 6, 7})
+        if conferencia_benner["nao_comparados"]:
+            _escrever_aba(livro, "GAI BENNER nao comparado", colunas_benner,
+                [[r.get(k, "") for k in campos_benner] for r in conferencia_benner["nao_comparados"]], colunas_moeda={5})
+        revisar = resultado["benner"]["nao_identificados"]
+        if revisar:
+            _escrever_aba(livro, "BENNER revisar", ["Aba", "Linha", "Data", "Valor", "Histórico"],
+                [[r[k] for k in ("aba", "linha", "data_pagamento", "valor", "historico")] for r in revisar], colunas_moeda={3})
+
+    # ---------- GIR / GGR / GOP ----------
+    for relatorio in resultado.get("sistemas", []):
+        _escrever_aba(livro, relatorio["sistema"] + " x banco", [
+            "Sistema", "Documento / Processo", "Contrato", "Boleto", "Cliente / Ocupante",
+            "Data pagamento", "Valor pago", "Página PDF", "DCB", "Valor DCB",
+            "Bolebarra", "Valor Bolebarra",
+        ], [[r.get(k) for k in (
+            "sistema", "documento", "contrato", "boleto", "nome", "data_pagamento",
+            "valor", "pagina", "situacao_dcb", "valor_dcb", "situacao_bolebarra", "valor_bolebarra",
+        )] for r in relatorio["linhas"]], colunas_moeda={6, 9, 11})
+
+    sistemas = resultado.get("bolebarras_sistemas")
+    if sistemas is not None:
+        _escrever_aba(livro, "Bolebarra x sistemas", [
+            "Boleto", "Sacado", "Data pagamento", "Sistema", "Valor Bolebarra",
+            "Valor nos sistemas", "Situação",
+        ], [[r[k] for k in ("boleto", "nome", "data_pagamento", "sistema", "valor",
+                            "valor_sistemas", "situacao")]
+            for r in sistemas["linhas"]], colunas_moeda={4, 5})
 
     # ---------- Bolebarra x GAI ----------
 
@@ -439,7 +491,9 @@ def montar_planilha(resultado):
             "GAI nao efetivadas",
             [
                 "Alienação",
+                "Sacado",
                 "Boleto",
+                "Nosso número",
                 "Agência",
                 "Parcela",
                 "Data pagamento",
@@ -450,7 +504,9 @@ def montar_planilha(resultado):
             [
                 [
                     registro["alienacao"],
+                    registro["nome"],
                     registro["boleto"],
+                    registro["nosso_numero"],
                     registro["agencia"],
                     registro["parcela"],
                     registro["data_pagamento"],
@@ -458,9 +514,14 @@ def montar_planilha(resultado):
                     registro["total_pago"],
                     registro["motivo"],
                 ]
-                for registro in nao_efetivadas["registros"]
+                # As recusas que trouxeram dinheiro primeiro, e
+                # depois as que a francesinha soube nomear.
+                for registro in sorted(
+                    nao_efetivadas["registros"],
+                    key=lambda r: (-r["total_pago"], not r["nome"]),
+                )
             ],
-            colunas_moeda={6},
+            colunas_moeda={8},
         )
 
     # ---------- PIX detalhado ----------
