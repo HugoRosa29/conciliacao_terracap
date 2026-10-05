@@ -1751,7 +1751,7 @@ def conciliar(
     resultado["sistemas"] = relatorios
     resultado["bolebarras_sistemas"] = (
         cruzar_sistemas(relatorios, dados_dcb, dados_bolebarras, dados_lidas)
-        if relatorios else None
+        if relatorios or dados_lidas is not None else None
     )
     for relatorio in relatorios:
         avisos.extend(relatorio["avisos"])

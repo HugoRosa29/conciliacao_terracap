@@ -212,6 +212,8 @@ def cruzar_sistemas(relatorios, dcb=None, bolebarras=None, gai_lidas=None):
             situacao = 'Conferido' if valor == valor_sistemas else 'Valor divergente'
         linhas.append(dict(boleto=chave[0], data_pagamento=chave[1],
             nome=titulos[0].get('nome', ''), sistema=', '.join(sistemas),
+            valores_por_sistema={s: sum((r['valor'] for r in itens), ZERO)
+                                 for s, itens in sistemas.items()},
             valor=valor, valor_sistemas=valor_sistemas, situacao=situacao))
     # Títulos sem chave também precisam continuar visíveis como pendências.
     for r in bolebarras['registros']:
@@ -219,5 +221,16 @@ def cruzar_sistemas(relatorios, dcb=None, bolebarras=None, gai_lidas=None):
             linhas.append(dict(boleto='', data_pagamento=r.get('data', ''),
                 nome=r.get('nome', ''), sistema='', valor=r['valor'],
                 valor_sistemas=ZERO, situacao='Sem nosso número válido'))
-    return dict(linhas=linhas, quantidade_pendentes=sum(r['situacao'] != 'Conferido' for r in linhas),
+    ausentes = [r for r in linhas if not r['sistema']]
+    divergentes = [r for r in linhas if r['situacao'] == 'Valor divergente']
+    ambiguos = [r for r in linhas if r['situacao'] == 'Identificação ambígua']
+    return dict(linhas=linhas, ausentes=ausentes, quantidade_ausentes=len(ausentes),
+                sistemas_enviados=(["GAI"] if gai_lidas is not None else []) +
+                                   [r['sistema'] for r in relatorios],
+                total_francesinha=sum((r['valor'] for r in linhas), ZERO),
+                quantidade_localizados=sum(bool(r['sistema']) for r in linhas),
+                total_localizado=sum((r['valor'] for r in linhas if r['sistema']), ZERO),
+                divergentes=divergentes, ambiguos=ambiguos,
+                total_ausente=sum((r['valor'] for r in ausentes), ZERO),
+                quantidade_pendentes=sum(r['situacao'] != 'Conferido' for r in linhas),
                 total_pendente=sum((r['valor'] for r in linhas if r['situacao'] != 'Conferido'), ZERO))

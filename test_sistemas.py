@@ -24,6 +24,23 @@ def relatorio(*registros, sistema='GGR'):
 
 
 class CruzamentosTest(unittest.TestCase):
+    def test_ausentes_consideram_relatorios_complementares(self):
+        bb = {'registros': [titulo(), titulo(boleto='654321'), titulo(boleto='999999')]}
+        gai = {'parcelas': [pagamento(boleto='654321', sistema='GAI')]}
+        r = relatorio(pagamento(valor='9.00'))
+        resultado = cruzar_sistemas([r], bolebarras=bb, gai_lidas=gai)
+        self.assertEqual([x['boleto'] for x in resultado['ausentes']], ['999999'])
+        self.assertEqual(resultado['quantidade_ausentes'], 1)
+        self.assertEqual(resultado['total_ausente'], D('10'))
+        self.assertEqual(resultado['total_francesinha'], D('30'))
+        self.assertEqual(resultado['total_localizado'], D('20'))
+        self.assertEqual(resultado['sistemas_enviados'], ['GAI', 'GGR'])
+        self.assertEqual(resultado['divergentes'][0]['sistema'], 'GGR')
+        self.assertEqual(resultado['divergentes'][0]['valor_sistemas'], D('9'))
+        self.assertEqual(resultado['linhas'][0]['situacao'], 'Valor divergente')
+        somente_gai = cruzar_sistemas([], bolebarras=bb, gai_lidas=gai)
+        self.assertEqual(somente_gai['quantidade_ausentes'], 2)
+
     def test_soma_parcelas_e_consolida_fora_do_gai(self):
         r = relatorio(pagamento(valor='4.00'), pagamento(valor='6.00'))
         dcb = {'liquidados': [titulo()]}
@@ -49,6 +66,9 @@ class CruzamentosTest(unittest.TestCase):
         outro = relatorio(pagamento(sistema='GOP'), sistema='GOP')
         resultado = cruzar_sistemas([r, outro], bolebarras={'registros': [titulo(valor='20')]})
         self.assertEqual(resultado['linhas'][0]['situacao'], 'Identificação ambígua')
+        self.assertEqual(resultado['total_localizado'], D('20'))
+        self.assertEqual(len(resultado['ambiguos']), 1)
+        self.assertEqual(resultado['ambiguos'][0]['valores_por_sistema'], {'GGR': D('10'), 'GOP': D('10')})
 
     def test_gai_tambem_entra_no_consolidado(self):
         r = relatorio(pagamento())
