@@ -4,6 +4,7 @@
 xlrd==2.0.2
 openpyxl==3.1.5
 XlsxWriter==3.2.9
+pypdf==6.19.0
 
 # Servidor local opcional (app.py). A versão publicada no
 # GitHub Pages não precisa de nada disto.

@@ -20,6 +20,12 @@ Com --pasta, os arquivos são reconhecidos pelo nome:
     dcb          .txt que começa com DCB
     francesinha  planilha com "bolepix" no nome
     bolebarras   planilha com "bolebarra" no nome
+    GAI          os .pdf da pasta, na ordem em que aparecem
+                 (cada relatório se identifica pelo próprio
+                 título, então a ordem não importa)
+
+O extrato é opcional: a conferência da Bolebarra com o DCB e com
+o GAI é feita título por título e não precisa dele.
 """
 
 from pathlib import Path
@@ -48,6 +54,8 @@ def descobrir(pasta):
         "dcb": None,
         "francesinha": None,
         "bolebarras": None,
+        "gai_lidas": None,
+        "gai_nao_baixadas": None,
     }
 
     for caminho in sorted(pasta.iterdir()):
@@ -65,6 +73,14 @@ def descobrir(pasta):
 
         elif "bolebarra" in nome:
             achados["bolebarras"] = achados["bolebarras"] or caminho
+
+        elif caminho.suffix.lower() == ".pdf":
+            # Qual dos dois relatórios do GAI é cada PDF sai do
+            # título impresso dentro dele, não do nome.
+            if achados["gai_lidas"] is None:
+                achados["gai_lidas"] = caminho
+            elif achados["gai_nao_baixadas"] is None:
+                achados["gai_nao_baixadas"] = caminho
 
         elif caminho.suffix.lower() == ".txt":
             achados["extrato"] = achados["extrato"] or caminho
@@ -85,6 +101,205 @@ def titulo(texto):
 
 def linha(rotulo, valor, largura=44):
     print(f"  {rotulo:<{largura}} {valor:>22}")
+
+
+SITUACAO_GAI = {
+    "lido_sem_baixa": "lido pelo GAI com valor 0,00",
+    "recusado": "recusado pelo GAI",
+    "ausente": "fora dos relatórios do GAI",
+}
+
+
+def _relatar_gai(resultado):
+    """
+    Os totais dos dois relatórios do GAI, como eles mesmos
+    declaram no rodapé.
+    """
+
+    lidas = resultado["gai_lidas"]
+    nao_baixadas = resultado["gai_nao_baixadas"]
+
+    if lidas is None and nao_baixadas is None:
+        return
+
+    print("\nGAI - RELATÓRIOS")
+    print("-" * LARGURA)
+
+    if lidas is not None:
+        linha(
+            f"Boletos baixados ({lidas['quantidade_boletos']})",
+            formatar_moeda(lidas["total_baixado"]),
+        )
+        linha(
+            "Boletos lidos com valor 0,00",
+            str(lidas["quantidade_lidos_sem_baixa"]),
+        )
+
+        if lidas["arquivo"]:
+            print(f"\n  Gerado a partir de {lidas['arquivo']}")
+
+    if nao_baixadas is not None:
+        linha(
+            f"Baixas não efetivadas ({nao_baixadas['quantidade']})",
+            formatar_moeda(nao_baixadas["total"]),
+        )
+
+        print("\n  Motivos:")
+
+        for motivo in nao_baixadas["motivos"]:
+            print(
+                f"    {motivo['quantidade']:>4}  "
+                f"{formatar_moeda(motivo['total']):>16}  "
+                f"{motivo['motivo'][:40]}"
+            )
+
+
+def _relatar_bolebarras_dcb(conferencia):
+    """
+    A Bolebarra conferida com o arquivo de retorno, título por
+    título.
+    """
+
+    if conferencia is None:
+        return
+
+    print("\nFRANCESINHA BOLEBARRA x DCB")
+    print("-" * LARGURA)
+
+    linha(
+        f"Conferidas pelo nosso número ({conferencia['quantidade_casados']})",
+        formatar_moeda(conferencia["total_conferido"]),
+    )
+
+    if conferencia["confere"]:
+        print("\n  Toda a francesinha Bolebarra está liquidada no DCB.")
+    else:
+        for rotulo, chave, total in (
+            ("Com valor diferente no DCB", "valor_divergente", None),
+            ("Sem baixa no DCB", "sem_baixa", "total_sem_baixa"),
+            ("Sem nosso número na francesinha", "sem_nosso_numero", None),
+        ):
+            quantidade = conferencia[f"quantidade_{chave}"]
+
+            if quantidade:
+                linha(
+                    f"{rotulo} ({quantidade})",
+                    formatar_moeda(conferencia[total]) if total else "",
+                )
+
+        for par in conferencia["valor_divergente"]:
+            print(
+                f"    {par['titulo']['nosso_numero']}  "
+                f"{par['titulo']['nome'][:28]:<30}"
+                f"{formatar_moeda(par['titulo']['valor']):>16} contra "
+                f"{formatar_moeda(par['registro']['valor'])} no DCB"
+            )
+
+        for item in conferencia["sem_baixa"]:
+            print(
+                f"    {item['titulo']['nosso_numero']}  "
+                f"{item['titulo']['nome'][:28]:<30}"
+                f"{formatar_moeda(item['titulo']['valor']):>16}"
+                f"   ocorrências: {', '.join(item['ocorrencias']) or '—'}"
+            )
+
+    linha(
+        "Liquidados no DCB fora da Bolebarra "
+        f"({conferencia['quantidade_fora_da_francesinha']})",
+        formatar_moeda(conferencia["total_fora_da_francesinha"]),
+    )
+
+    print("  (são os recebimentos do Bolepix, que não têm francesinha")
+    print("   de cobrança própria)")
+
+
+def _relatar_bolebarras_gai(conferencia):
+    """
+    O que o GAI fez com cada cobrança da Bolebarra.
+    """
+
+    if conferencia is None:
+        return
+
+    titulo("FRANCESINHA BOLEBARRA x GAI")
+
+    linha(
+        f"Baixadas no GAI ({conferencia['quantidade_baixados']})",
+        formatar_moeda(conferencia["total_baixado"]),
+    )
+    linha(
+        f"NÃO baixadas no GAI ({conferencia['quantidade_nao_baixados']})",
+        formatar_moeda(conferencia["total_nao_baixado"]),
+    )
+
+    for situacao in conferencia["situacoes"]:
+        linha(
+            "   "
+            + SITUACAO_GAI.get(situacao["situacao"], situacao["situacao"])
+            + f" ({situacao['quantidade']})",
+            formatar_moeda(situacao["total"]),
+        )
+
+    linha(
+        "Baixados no GAI fora da Bolebarra "
+        f"({conferencia['quantidade_fora_da_francesinha']})",
+        formatar_moeda(conferencia["total_fora_da_francesinha"]),
+    )
+
+    if conferencia["valor_divergente"]:
+        print("\nBAIXADAS NO GAI POR VALOR DIFERENTE")
+        print("-" * LARGURA)
+
+        for item in conferencia["valor_divergente"]:
+            print(
+                f"  {item['titulo']['nosso_numero']}  "
+                f"{item['titulo']['nome'][:26]:<28}"
+                f"{formatar_moeda(item['titulo']['valor']):>16} contra "
+                f"{formatar_moeda(item['valor_gai'])} no GAI"
+            )
+
+    if not conferencia["nao_baixados"]:
+        print("\n  Toda a francesinha Bolebarra foi baixada no GAI.")
+        return
+
+    print("\nBOLEBARRA NÃO BAIXADA NO GAI")
+    print("-" * LARGURA)
+
+    for numero, item in enumerate(conferencia["nao_baixados"], start=1):
+        print(
+            f"  {numero:>3}. {item['titulo']['nome'][:30]:<32}"
+            f"{formatar_moeda(item['titulo']['valor']):>16}"
+            f"   boleto {item['titulo']['boleto']}"
+            f"   alienação {item['alienacao'] or '—'}"
+        )
+        print(
+            f"       {SITUACAO_GAI.get(item['situacao'], item['situacao'])}"
+            + (f" — {item['motivo'][:70]}" if item["motivo"] else "")
+        )
+
+
+def _relatar_bolepix(bolepix):
+    """
+    Os PIX recebidos que não têm baixa no arquivo de retorno.
+    """
+
+    if bolepix is None or not bolepix["nao_baixados"]:
+        return
+
+    print("\nBOLEPIX NÃO BAIXADO")
+    print("-" * LARGURA)
+
+    for numero, registro in enumerate(bolepix["nao_baixados"], start=1):
+        print(
+            f"  {numero:>3}. {registro['nome'][:38]:<40}"
+            f"{formatar_moeda(registro['valor']):>16}"
+            f"   {registro['data']}"
+        )
+
+    linha(
+        f"Total não baixado ({bolepix['quantidade_nao_baixados']})",
+        formatar_moeda(bolepix["total_nao_baixados"]),
+    )
 
 
 def gerar_relatorio(resultado):
@@ -161,6 +376,11 @@ def gerar_relatorio(resultado):
                 f"{ocorrencia['quantidade']:>6}"
             )
 
+    _relatar_gai(resultado)
+    _relatar_bolebarras_dcb(resultado["bolebarras_dcb"])
+    _relatar_bolebarras_gai(resultado["bolebarras_gai"])
+    _relatar_bolepix(resultado["bolepix_dcb"])
+
     if divergencia is not None:
         titulo("DIVERGÊNCIA")
 
@@ -178,28 +398,17 @@ def gerar_relatorio(resultado):
         )
 
         if divergencia["nao_baixados"]:
-            print("\nBOLEPIX NÃO BAIXADO")
-            print("-" * LARGURA)
+            linha(
+                "Explicada por Bolepix não baixado "
+                f"({divergencia['quantidade_nao_baixados']})",
+                formatar_moeda(divergencia["total_nao_baixados"])
+                + ("  OK" if divergencia["explicada"] else "  !!"),
+            )
 
-            for numero, registro in enumerate(
-                divergencia["nao_baixados"], start=1
-            ):
+            if not divergencia["explicada"]:
                 print(
-                    f"  {numero:>3}. {registro['nome'][:38]:<40}"
-                    f"{formatar_moeda(registro['valor']):>16}"
-                    f"   {registro['data']}"
-                )
-
-            if divergencia["explicada"]:
-                print(
-                    "\n  A divergência está totalmente explicada pelos "
-                    "itens acima."
-                )
-            else:
-                print(
-                    "\n  ATENÇÃO: os itens acima somam "
-                    f"{formatar_moeda(divergencia['total_nao_baixados'])} "
-                    "e não explicam toda a divergência."
+                    "\n  ATENÇÃO: os Bolepix não baixados não explicam "
+                    "toda a divergência. Veja a conferência da Bolebarra."
                 )
 
     if detalhado is not None:
@@ -233,7 +442,15 @@ def main(argv=None):
     analisador.add_argument("--extrato", help="TXT do extrato BRB")
     analisador.add_argument("--francesinha", help="Francesinha Bolepix")
     analisador.add_argument("--dcb", help="Arquivo de retorno (CNAB 400)")
-    analisador.add_argument("--bolebarras", help="Francesinha Bolebarras")
+    analisador.add_argument("--bolebarras", help="Francesinha Bolebarra")
+    analisador.add_argument(
+        "--gai-lidas",
+        help="PDF da Relação de Parcelas Lidas do GAI",
+    )
+    analisador.add_argument(
+        "--gai-nao-baixadas",
+        help="PDF das Baixas de Pagamentos Não Efetivadas do GAI",
+    )
     analisador.add_argument(
         "--pasta",
         help="Pasta com os arquivos do dia, reconhecidos pelo nome",
@@ -258,6 +475,8 @@ def main(argv=None):
             "francesinha": argumentos.francesinha,
             "dcb": argumentos.dcb,
             "bolebarras": argumentos.bolebarras,
+            "gai_lidas": argumentos.gai_lidas,
+            "gai_nao_baixadas": argumentos.gai_nao_baixadas,
         }
 
     arquivos = {

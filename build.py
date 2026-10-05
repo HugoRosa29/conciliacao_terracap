@@ -25,6 +25,7 @@ DESTINO = RAIZ / "docs" / "py"
 # validar.py (testes) ficam fora de propósito.
 MODULOS = (
     "planilhas.py",
+    "gai.py",
     "conciliacao.py",
     "exportar.py",
     "ponte.py",

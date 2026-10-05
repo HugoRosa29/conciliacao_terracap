@@ -13,6 +13,7 @@
 
 const MODULOS = [
   "planilhas.py",
+  "gai.py",
   "conciliacao.py",
   "exportar.py",
   "ponte.py",
@@ -23,9 +24,29 @@ const WHEELS = [
   "vendor/et_xmlfile-2.0.0-py3-none-any.whl",
   "vendor/openpyxl-3.1.5-py2.py3-none-any.whl",
   "vendor/xlsxwriter-3.2.9-py3-none-any.whl",
+  "vendor/pypdf-6.19.0-py3-none-any.whl",
 ];
 
-const CAMPOS = ["extrato", "francesinha", "dcb", "bolebarras"];
+const CAMPOS = [
+  "dcb",
+  "bolebarras",
+  "gai_lidas",
+  "gai_nao_baixadas",
+  "francesinha",
+  "extrato",
+];
+
+/* Como cada situação da conferência com o GAI é escrita na
+   tela, e a cor que ela merece. */
+const SITUACAO_GAI = {
+  baixado: { texto: "Baixado no GAI", classe: "ok" },
+  lido_sem_baixa: {
+    texto: "Lido com valor 0,00",
+    classe: "encerrado",
+  },
+  recusado: { texto: "Recusado pelo GAI", classe: "encerrado" },
+  ausente: { texto: "Fora dos relatórios do GAI", classe: "estudo" },
+};
 
 const arquivos = {};
 
@@ -308,9 +329,12 @@ function desenhar(resultado) {
 
   desenharAvisos(resultado.avisos || []);
   desenharIndicadores(resultado);
-  desenharDivergencia(resultado.divergencia);
+  desenharPrestacaoDeContas(resultado);
 
-  desenharNaoBaixados(resultado.divergencia);
+  desenharBolebarraGai(resultado.bolebarras_gai);
+  desenharBolebarraDcb(resultado.bolebarras_dcb);
+  desenharNaoBaixados(resultado.bolepix_dcb);
+  desenharMotivosGai(resultado.gai_nao_baixadas);
   desenharPix(resultado.pix_detalhado);
   desenharCobranca(resultado.extrato);
   desenharOcorrencias(resultado.dcb);
@@ -380,13 +404,13 @@ function desenharIndicadores(resultado) {
 
     cartoes.push(
       indicador({
-        titulo: "Francesinha Bolebarras",
+        titulo: "Francesinha Bolebarra",
         valor: formatarMoeda(bolebarras.total),
         detalhe: conferencia
           ? conferencia.confere
             ? "Fecha com a cobrança do extrato"
             : `Diferença de ${formatarMoeda(conferencia.diferenca)}`
-          : `${inteiro.format(bolebarras.quantidade)} recebimentos`,
+          : `${inteiro.format(bolebarras.quantidade)} cobranças`,
         classe: conferencia ? (conferencia.confere ? "ok" : "alerta") : "",
       }),
     );
@@ -404,18 +428,79 @@ function desenharIndicadores(resultado) {
     );
   }
 
+  const comDcb = resultado.bolebarras_dcb;
+
+  if (comDcb) {
+    cartoes.push(
+      indicador({
+        titulo: "Bolebarra x DCB",
+        valor: formatarMoeda(comDcb.total_conferido),
+        detalhe: comDcb.confere
+          ? `${inteiro.format(
+              comDcb.quantidade_casados,
+            )} cobranças liquidadas, todas pelo valor certo`
+          : `${inteiro.format(
+              comDcb.quantidade_sem_baixa + comDcb.quantidade_valor_divergente,
+            )} cobranças não conferem`,
+        classe: comDcb.confere ? "ok" : "alerta",
+      }),
+    );
+  }
+
+  const lidas = resultado.gai_lidas;
+
+  if (lidas) {
+    cartoes.push(
+      indicador({
+        titulo: "Baixado no GAI",
+        valor: formatarMoeda(lidas.total_baixado),
+        detalhe: `${inteiro.format(lidas.quantidade_boletos)} boletos na Relação de Parcelas Lidas`,
+      }),
+    );
+  }
+
+  const comGai = resultado.bolebarras_gai;
+
+  if (comGai) {
+    cartoes.push(
+      indicador({
+        titulo: "Bolebarra não baixada no GAI",
+        valor: formatarMoeda(comGai.total_nao_baixado),
+        detalhe: comGai.confere
+          ? "Toda a cobrança foi baixada no GAI"
+          : `${inteiro.format(comGai.quantidade_nao_baixados)} cobranças`,
+        classe: comGai.confere ? "ok" : "alerta",
+      }),
+    );
+  }
+
+  const bolepix = resultado.bolepix_dcb;
+
+  if (bolepix) {
+    cartoes.push(
+      indicador({
+        titulo: "Bolepix não baixado",
+        valor: formatarMoeda(bolepix.total_nao_baixados),
+        detalhe: bolepix.confere
+          ? "Todo o PIX recebido tem baixa no retorno"
+          : `${inteiro.format(
+              bolepix.quantidade_nao_baixados,
+            )} recebimentos sem baixa`,
+        classe: bolepix.confere ? "ok" : "alerta",
+      }),
+    );
+  }
+
   if (divergencia) {
     const zerada = Math.abs(Number(divergencia.divergencia)) < 0.005;
 
     cartoes.push(
       indicador({
-        titulo: "Divergência",
+        titulo: "Divergência do dia",
         valor: formatarMoeda(divergencia.divergencia),
         detalhe: zerada
           ? "Nada pendente de baixa"
-          : `${inteiro.format(
-              divergencia.quantidade_nao_baixados,
-            )} Bolepix sem baixa no retorno`,
+          : "Pagamentos do extrato menos o arquivo de retorno",
         classe: zerada ? "ok" : "alerta",
       }),
     );
@@ -426,48 +511,112 @@ function desenharIndicadores(resultado) {
     '<p class="vazio">Envie os arquivos para ver os totais.</p>';
 }
 
-function desenharDivergencia(divergencia) {
+function linhaConta(rotulo, valor, classe = "") {
+  return `
+    <div class="linha-conta ${classe}">
+      <span>${escapar(rotulo)}</span>
+      <span>${valor}</span>
+    </div>`;
+}
+
+/* A prestação de contas do dia: a conferência da Bolebarra com
+   o GAI, que não depende do extrato, e — quando o extrato vem —
+   a divergência entre o que entrou na conta e o que o arquivo
+   de retorno baixou. */
+function desenharPrestacaoDeContas(resultado) {
   const cartao = el("#cartao-divergencia");
 
-  if (!divergencia) {
+  const comGai = resultado.bolebarras_gai;
+  const divergencia = resultado.divergencia;
+
+  if (!comGai && !divergencia) {
     cartao.hidden = true;
     return;
   }
 
   cartao.hidden = false;
 
-  const explicada = divergencia.explicada;
+  const blocos = [];
 
-  const selo =
-    explicada === null
-      ? ""
-      : explicada
-        ? `<div class="selo ok">
-             A divergência está totalmente explicada pelos
-             ${inteiro.format(divergencia.quantidade_nao_baixados)}
-             Bolepix listados abaixo.
-           </div>`
-        : `<div class="selo alerta">
-             Os Bolepix não baixados somam
-             ${formatarMoeda(divergencia.total_nao_baixados)} e não
-             explicam toda a divergência. Verifique também a cobrança
-             por código de barras.
-           </div>`;
+  if (comGai) {
+    const contas = [
+      linhaConta(
+        "Francesinha Bolebarra",
+        formatarMoeda(comGai.total_francesinha),
+      ),
+      linhaConta(
+        `Baixado no GAI (${inteiro.format(comGai.quantidade_baixados)} cobranças)`,
+        `&minus; ${formatarMoeda(comGai.total_baixado)}`,
+      ),
+      linhaConta(
+        "Bolebarra não baixada no GAI",
+        formatarMoeda(comGai.total_nao_baixado),
+        "total",
+      ),
+    ];
 
-  el("#divergencia").innerHTML = `
-    <div class="linha-conta">
-      <span>Total de pagamentos (extrato)</span>
-      <span>${formatarMoeda(divergencia.total_pagamentos)}</span>
-    </div>
-    <div class="linha-conta">
-      <span>Total do arquivo de retorno (DCB)</span>
-      <span>&minus; ${formatarMoeda(divergencia.total_retorno)}</span>
-    </div>
-    <div class="linha-conta total">
-      <span>Divergência</span>
-      <span>${formatarMoeda(divergencia.divergencia)}</span>
-    </div>
-    ${selo}`;
+    /* A explicação de cada situação já diz o que aconteceu, por
+       isso o carimbo não se repete aqui. */
+    const detalhe = (comGai.situacoes || [])
+      .map(
+        (situacao) => `<li>
+            <strong>${formatarMoeda(situacao.total)}</strong>
+            em ${inteiro.format(situacao.quantidade)}
+            ${situacao.quantidade === 1 ? "cobrança" : "cobranças"}.
+            ${escapar(situacao.explicacao || "")}
+          </li>`,
+      )
+      .join("");
+
+    blocos.push(
+      contas.join("") +
+        (comGai.confere
+          ? `<div class="selo ok">
+               Toda a cobrança por código de barras foi baixada no GAI.
+             </div>`
+          : `<div class="selo"><ul class="motivos">${detalhe}</ul></div>`),
+    );
+  }
+
+  if (divergencia) {
+    const explicada = divergencia.explicada;
+
+    blocos.push(
+      [
+        linhaConta(
+          "Total de pagamentos (extrato)",
+          formatarMoeda(divergencia.total_pagamentos),
+        ),
+        linhaConta(
+          "Total do arquivo de retorno (DCB)",
+          `&minus; ${formatarMoeda(divergencia.total_retorno)}`,
+        ),
+        linhaConta(
+          "Divergência do dia",
+          formatarMoeda(divergencia.divergencia),
+          "total",
+        ),
+      ].join("") +
+        (explicada === null
+          ? ""
+          : explicada
+            ? `<div class="selo ok">
+                 A divergência está totalmente explicada pelos
+                 ${inteiro.format(divergencia.quantidade_nao_baixados)}
+                 Bolepix sem baixa no retorno.
+               </div>`
+            : `<div class="selo">
+                 Os Bolepix não baixados somam
+                 ${formatarMoeda(divergencia.total_nao_baixados)} e não
+                 explicam toda a divergência. Veja a conferência da
+                 Bolebarra com o DCB.
+               </div>`),
+    );
+  }
+
+  el("#divergencia").innerHTML = blocos
+    .map((bloco) => `<div class="conta">${bloco}</div>`)
+    .join("");
 }
 
 function tabela(colunas, linhas, vazio) {
@@ -507,8 +656,113 @@ function tabela(colunas, linhas, vazio) {
     </div>`;
 }
 
-function desenharNaoBaixados(divergencia) {
-  const linhas = (divergencia?.nao_baixados || []).map((registro, indice) => ({
+function carimbo(situacao) {
+  const { texto, classe } = SITUACAO_GAI[situacao] || {
+    texto: situacao,
+    classe: "estudo",
+  };
+
+  return `<span class="carimbo carimbo-${classe}">${escapar(texto)}</span>`;
+}
+
+/* A tabela central: cobrança por cobrança, o que o GAI fez com
+   ela. Traz também as que o GAI baixou por outro valor. */
+function desenharBolebarraGai(conferencia) {
+  const linhas = [
+    ...(conferencia?.nao_baixados || []),
+    ...(conferencia?.valor_divergente || []),
+  ].map((item, indice) => ({
+    numero: indice + 1,
+    situacao: carimbo(item.situacao),
+    nome: item.nome || "—",
+    boleto: item.boleto || "—",
+    alienacao: item.alienacao || "—",
+    valor: formatarMoeda(item.valor),
+    // Zero aqui é ausência de baixa, não um valor baixado.
+    valor_gai: Number(item.valor_gai)
+      ? formatarMoeda(item.valor_gai)
+      : "—",
+    motivo: item.motivo || "—",
+  }));
+
+  el('[data-painel="bolebarra-gai"]').innerHTML = tabela(
+    [
+      { titulo: "#", chave: "numero", numero: true },
+      { titulo: "Situação", chave: "situacao", html: true },
+      { titulo: "Sacado", chave: "nome" },
+      { titulo: "Boleto", chave: "boleto" },
+      { titulo: "Alienação", chave: "alienacao" },
+      { titulo: "Valor recebido", chave: "valor", numero: true },
+      { titulo: "Baixado no GAI", chave: "valor_gai", numero: true },
+      { titulo: "Motivo informado pelo GAI", chave: "motivo" },
+    ],
+    linhas,
+    conferencia
+      ? "Toda a cobrança da francesinha Bolebarra foi baixada no GAI."
+      : "Envie a francesinha Bolebarra e os PDFs do GAI para ver este bloco.",
+  );
+}
+
+/* Só os desencontros: a cobrança sem baixa no retorno e a que
+   liquidou por outro valor. O que confere fica no Excel. */
+function desenharBolebarraDcb(conferencia) {
+  const linhas = [];
+
+  (conferencia?.valor_divergente || []).forEach((item) =>
+    linhas.push({
+      situacao: '<span class="carimbo carimbo-encerrado">Valor diferente</span>',
+      nosso_numero: item.nosso_numero,
+      nome: item.nome || "—",
+      valor: formatarMoeda(item.valor),
+      valor_dcb: formatarMoeda(item.valor_dcb),
+      detalhe: `Diferença de ${formatarMoeda(item.diferenca)}`,
+    }),
+  );
+
+  (conferencia?.sem_baixa || []).forEach((item) =>
+    linhas.push({
+      situacao: '<span class="carimbo carimbo-encerrado">Sem baixa</span>',
+      nosso_numero: item.nosso_numero,
+      nome: item.nome || "—",
+      valor: formatarMoeda(item.valor),
+      valor_dcb: "—",
+      detalhe: item.no_arquivo
+        ? `No arquivo, ocorrências ${item.ocorrencias}`
+        : "Não está no arquivo de retorno",
+    }),
+  );
+
+  el('[data-painel="bolebarra-dcb"]').innerHTML =
+    tabela(
+      [
+        { titulo: "Situação", chave: "situacao", html: true },
+        { titulo: "Nosso número", chave: "nosso_numero" },
+        { titulo: "Sacado", chave: "nome" },
+        { titulo: "Valor na francesinha", chave: "valor", numero: true },
+        { titulo: "Valor pago no DCB", chave: "valor_dcb", numero: true },
+        { titulo: "Observação", chave: "detalhe" },
+      ],
+      linhas,
+      conferencia
+        ? `As ${inteiro.format(
+            conferencia.quantidade_casados,
+          )} cobranças da francesinha Bolebarra estão liquidadas no arquivo de retorno, todas pelo valor certo.`
+        : "Envie a francesinha Bolebarra e o DCB para ver este bloco.",
+    ) +
+    (conferencia
+      ? `<p class="nota-tabela">
+           Além delas, ${inteiro.format(
+             conferencia.quantidade_fora_da_francesinha,
+           )} título(s) liquidado(s) no retorno
+           (${formatarMoeda(conferencia.total_fora_da_francesinha)})
+           não estão na francesinha Bolebarra: são os recebimentos
+           do Bolepix, que não têm francesinha de cobrança própria.
+         </p>`
+      : "");
+}
+
+function desenharNaoBaixados(bolepix) {
+  const linhas = (bolepix?.nao_baixados || []).map((registro, indice) => ({
     numero: indice + 1,
     data: registro.data || "—",
     nome: registro.nome || "—",
@@ -523,9 +777,31 @@ function desenharNaoBaixados(divergencia) {
       { titulo: "Valor", chave: "valor", numero: true },
     ],
     linhas,
-    divergencia
+    bolepix
       ? "Todos os Bolepix recebidos têm baixa no arquivo de retorno."
-      : "Envie o extrato, a francesinha Bolepix e o DCB para ver este bloco.",
+      : "Envie a francesinha Bolepix e o DCB para ver este bloco.",
+  );
+}
+
+/* O retrato do relatório de Baixas Não Efetivadas: por que o
+   GAI recusou cada pagamento. */
+function desenharMotivosGai(relatorio) {
+  const linhas = (relatorio?.motivos || []).map((motivo) => ({
+    motivo: motivo.motivo,
+    quantidade: inteiro.format(motivo.quantidade),
+    total: formatarMoeda(motivo.total),
+  }));
+
+  el('[data-painel="gai-motivos"]').innerHTML = tabela(
+    [
+      { titulo: "Motivo informado pelo GAI", chave: "motivo" },
+      { titulo: "Registros", chave: "quantidade", numero: true },
+      { titulo: "Total recusado", chave: "total", numero: true },
+    ],
+    linhas,
+    relatorio
+      ? "O relatório de Baixas Não Efetivadas do GAI veio sem registros."
+      : "Envie o PDF de Baixas Não Efetivadas do GAI para ver este bloco.",
   );
 }
 

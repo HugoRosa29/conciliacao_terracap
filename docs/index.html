@@ -81,11 +81,35 @@
 
     <div class="grade-arquivos">
 
-      <label class="caixa-arquivo" data-campo="extrato">
-        <input type="file" accept=".txt,.text" hidden>
-        <span class="codigo">EXTRATO / BRB</span>
-        <span class="rotulo">Extrato bancário</span>
-        <span class="formato">TXT do Internet Banking</span>
+      <label class="caixa-arquivo" data-campo="dcb">
+        <input type="file" accept=".txt,.ret,.xls,.xlsx" hidden>
+        <span class="codigo">DCB / RETORNO</span>
+        <span class="rotulo">Arquivo de retorno</span>
+        <span class="formato">CNAB 400 (TXT)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo" data-campo="bolebarras">
+        <input type="file" accept=".xls,.xlsx,.xlt,.txt,.csv" hidden>
+        <span class="codigo">FRANCESINHA / BOLEBARRA</span>
+        <span class="rotulo">Cobrança por código de barras</span>
+        <span class="formato">Relatório Francesinha movimento (XLS)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo" data-campo="gai_lidas">
+        <input type="file" accept=".pdf" hidden>
+        <span class="codigo">GAI / PARCELAS LIDAS</span>
+        <span class="rotulo">Valores baixados no GAI</span>
+        <span class="formato">Relação de Parcelas Lidas (PDF)</span>
+        <span class="nome">Clique ou arraste o arquivo</span>
+      </label>
+
+      <label class="caixa-arquivo" data-campo="gai_nao_baixadas">
+        <input type="file" accept=".pdf" hidden>
+        <span class="codigo">GAI / NÃO BAIXADAS</span>
+        <span class="rotulo">Valores não baixados no GAI</span>
+        <span class="formato">Baixas Não Efetivadas (PDF)</span>
         <span class="nome">Clique ou arraste o arquivo</span>
       </label>
 
@@ -97,23 +121,23 @@
         <span class="nome">Clique ou arraste o arquivo</span>
       </label>
 
-      <label class="caixa-arquivo" data-campo="dcb">
-        <input type="file" accept=".txt,.ret,.xls,.xlsx" hidden>
-        <span class="codigo">DCB / RETORNO</span>
-        <span class="rotulo">Arquivo de retorno</span>
-        <span class="formato">CNAB 400 (TXT)</span>
-        <span class="nome">Clique ou arraste o arquivo</span>
-      </label>
-
-      <label class="caixa-arquivo opcional" data-campo="bolebarras">
-        <input type="file" accept=".xls,.xlsx,.xlt,.txt,.csv" hidden>
-        <span class="codigo">FRANCESINHA / BOLEBARRAS</span>
-        <span class="rotulo">Cobrança por código de barras</span>
-        <span class="formato">Opcional</span>
+      <label class="caixa-arquivo opcional" data-campo="extrato">
+        <input type="file" accept=".txt,.text" hidden>
+        <span class="codigo">EXTRATO / BRB</span>
+        <span class="rotulo">Extrato bancário</span>
+        <span class="formato">Opcional — fecha o total do dia</span>
         <span class="nome">Clique ou arraste o arquivo</span>
       </label>
 
     </div>
+
+    <p class="nota-entrada">
+      Envie o que tiver: cada conferência aparece quando os
+      arquivos dela chegam. A Bolebarra é conferida com o DCB e
+      com o GAI pelo nosso número de cada título, sem depender do
+      extrato. Os dois PDFs do GAI se identificam sozinhos, então
+      não há como trocá-los de lugar.
+    </p>
 
     <div class="acoes">
       <button id="botao-conciliar" type="button" disabled>Conciliar</button>
@@ -145,7 +169,7 @@
          prestação de contas. -->
     <section class="satelite" id="cartao-divergencia" hidden>
       <p class="sobrancelha-secao">03 &mdash; Prestação de contas</p>
-      <h2>A divergência</h2>
+      <h2>O que não fechou</h2>
       <div id="divergencia"></div>
     </section>
 
@@ -154,8 +178,17 @@
       <h2>Item a item</h2>
 
       <div class="abas" role="tablist">
-        <button class="aba ativa" data-aba="nao-baixados" role="tab">
+        <button class="aba ativa" data-aba="bolebarra-gai" role="tab">
+          Bolebarra não baixada no GAI
+        </button>
+        <button class="aba" data-aba="bolebarra-dcb" role="tab">
+          Bolebarra x DCB
+        </button>
+        <button class="aba" data-aba="nao-baixados" role="tab">
           Bolepix não baixado
+        </button>
+        <button class="aba" data-aba="gai-motivos" role="tab">
+          Motivos do GAI
         </button>
         <button class="aba" data-aba="pix" role="tab">
           PIX identificados
@@ -168,7 +201,10 @@
         </button>
       </div>
 
-      <div class="painel" data-painel="nao-baixados"></div>
+      <div class="painel" data-painel="bolebarra-gai"></div>
+      <div class="painel" data-painel="bolebarra-dcb" hidden></div>
+      <div class="painel" data-painel="nao-baixados" hidden></div>
+      <div class="painel" data-painel="gai-motivos" hidden></div>
       <div class="painel" data-painel="pix" hidden></div>
       <div class="painel" data-painel="cobranca" hidden></div>
       <div class="painel" data-painel="ocorrencias" hidden></div>
@@ -188,22 +224,6 @@
 
     <ol class="capitulos">
       <li>
-        <span class="codigo">EXTRATO</span>
-        <p>
-          Soma os créditos <code>CRED PIX QR CODE DINAMICO</code>
-          (Bolepix) e <code>CREDITO COBRANCA BRB</code> (Bolebarras).
-          A soma dos dois é o <em>total de pagamentos QR Code +
-          código de barras</em>.
-        </p>
-      </li>
-      <li>
-        <span class="codigo">BOLEPIX</span>
-        <p>
-          Lê os recebimentos PIX com o nome do pagador e confere o
-          total contra o extrato.
-        </p>
-      </li>
-      <li>
         <span class="codigo">DCB</span>
         <p>
           Lê o retorno CNAB 400 e soma os títulos liquidados
@@ -212,11 +232,41 @@
         </p>
       </li>
       <li>
-        <span class="codigo">DIVERGÊNCIA</span>
+        <span class="codigo">BOLEBARRA &times; DCB</span>
         <p>
-          Total de pagamentos menos total do arquivo de retorno,
-          com os Bolepix não baixados identificados um por um,
-          por nome e valor.
+          Confere cada cobrança da francesinha com o retorno pelo
+          <em>nosso número</em> — não pelo valor. Aponta a cobrança
+          que não liquidou e a que liquidou por outro valor.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">BOLEBARRA &times; GAI</span>
+        <p>
+          O nosso número do BRB carrega, nos seis dígitos do meio,
+          o número do boleto que o GAI imprime. Por ele, cada
+          cobrança encontra o seu par na <em>Relação de Parcelas
+          Lidas</em> — somando as parcelas que o boleto pagou — e
+          diz se o GAI baixou, leu com valor 0,00, recusou (com o
+          motivo) ou nem recebeu a cobrança.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">BOLEPIX</span>
+        <p>
+          Lê os recebimentos PIX com o nome do pagador e aponta,
+          por nome e valor, os que não têm baixa no retorno. O
+          relatório de PIX do banco não traz nosso número, então
+          aqui a conferência é pelo valor.
+        </p>
+      </li>
+      <li>
+        <span class="codigo">EXTRATO</span>
+        <p>
+          Opcional. Soma os créditos
+          <code>CRED PIX QR CODE DINAMICO</code> e
+          <code>CREDITO COBRANCA BRB</code> para fechar o
+          <em>total de pagamentos</em> do dia contra o total do
+          arquivo de retorno.
         </p>
       </li>
     </ol>

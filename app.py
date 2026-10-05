@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 
 from conciliacao import conciliar
 from exportar import montar_planilha
+from ponte import para_tela
 
 
 PASTA = Path(__file__).resolve().parent
@@ -83,65 +84,13 @@ def resposta_para_tela(resultado):
     """
     Monta a versão enxuta do resultado que vai para o navegador.
 
-    O DCB tem milhares de títulos; a tela recebe só os totais e
-    as ocorrências. O resultado completo fica no servidor para a
-    exportação em Excel.
+    É a mesma versão que o Pyodide monta no modo sem servidor:
+    quem decide o que vai para a tela é ponte.para_tela, para as
+    duas interfaces nunca saírem de sincronia. O resultado
+    completo fica no servidor para a exportação em Excel.
     """
 
-    enxuto = {
-        "avisos": resultado["avisos"],
-        "extrato": None,
-        "francesinha": None,
-        "bolebarras": None,
-        "dcb": None,
-        "pix_detalhado": resultado["pix_detalhado"],
-        "divergencia": resultado["divergencia"],
-    }
-
-    extrato = resultado["extrato"]
-
-    if extrato is not None:
-        enxuto["extrato"] = {
-            chave: extrato[chave]
-            for chave in (
-                "quantidade_pix",
-                "quantidade_cobranca",
-                "quantidade_outros",
-                "total_pix",
-                "total_cobranca",
-                "total_outros",
-                "total_pagamentos",
-            )
-        }
-
-        enxuto["extrato"]["cobranca"] = extrato["cobranca"]
-
-    for bloco in ("francesinha", "bolebarras"):
-
-        dados = resultado[bloco]
-
-        if dados is None:
-            continue
-
-        enxuto[bloco] = {
-            "formato": dados["formato"],
-            "quantidade": dados["quantidade"],
-            "total": dados["total"],
-            "conferencia_extrato": dados.get("conferencia_extrato"),
-        }
-
-    dcb = resultado["dcb"]
-
-    if dcb is not None:
-        enxuto["dcb"] = {
-            "formato": dcb["formato"],
-            "quantidade_registros": dcb["quantidade_registros"],
-            "quantidade_liquidados": dcb["quantidade_liquidados"],
-            "total_liquidado": dcb["total_liquidado"],
-            "ocorrencias": dcb["ocorrencias"],
-        }
-
-    return limpar(enxuto)
+    return limpar(para_tela(resultado))
 
 
 def guardar(resultado):
@@ -216,6 +165,8 @@ async def api_conciliar(
     francesinha: UploadFile = File(None),
     dcb: UploadFile = File(None),
     bolebarras: UploadFile = File(None),
+    gai_lidas: UploadFile = File(None),
+    gai_nao_baixadas: UploadFile = File(None),
 ):
     """
     Recebe os arquivos do dia e devolve a conciliação.
@@ -225,7 +176,13 @@ async def api_conciliar(
         "extrato": await receber(extrato, "extrato"),
         "francesinha": await receber(francesinha, "francesinha Bolepix"),
         "dcb": await receber(dcb, "DCB"),
-        "bolebarras": await receber(bolebarras, "francesinha Bolebarras"),
+        "bolebarras": await receber(bolebarras, "francesinha Bolebarra"),
+        "gai_lidas": await receber(
+            gai_lidas, "Relação de Parcelas Lidas do GAI"
+        ),
+        "gai_nao_baixadas": await receber(
+            gai_nao_baixadas, "Baixas Não Efetivadas do GAI"
+        ),
     }
 
     if not any(arquivos.values()):

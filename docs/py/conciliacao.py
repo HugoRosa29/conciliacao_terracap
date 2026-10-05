@@ -213,6 +213,36 @@ def somar(registros, campo="valor"):
     return sum((r[campo] for r in registros), ZERO)
 
 
+def boleto_do_nosso_numero(nosso_numero):
+    r"""
+    Extrai do nosso número do BRB o número do boleto — que é o
+    que o GAI imprime, nos relatórios dele, como "Nosso Número".
+
+    O nosso número tem 12 dígitos:
+
+        6 8 3 4 3 4 2 0 7 0 1 5
+        |  \____ ____/  \_/ \_/
+        |       |        |   |
+        |       |        |   dígitos verificadores
+        |       |        código do banco (070 = BRB)
+        |       boleto, como o GAI chama de nosso número
+        prefixo da carteira
+
+    É por esse número que a cobrança da francesinha encontra o
+    seu par no GAI, sem depender do valor. Conferido contra os
+    arquivos de retorno reais (3.291 títulos, todos com 070 na
+    mesma posição) e, item a item, contra a francesinha
+    Bolebarra de 30/09/2026.
+    """
+
+    digitos = re.sub(r"\D", "", str(nosso_numero or ""))
+
+    if len(digitos) != 12 or digitos[7:10] != "070":
+        return ""
+
+    return digitos[1:7]
+
+
 def mascarar_documento(documento):
     """
     Mostra apenas o miolo do CPF/CNPJ, como na planilha manual:
@@ -480,6 +510,7 @@ def ler_dcb(origem):
 # 3. FRANCESINHA
 # ============================================================
 
+# O Bolepix sai no relatório "Extrato/Devolução".
 COLUNAS_FRANCESINHA = {
     "data": ("data e hora", "data/hora", "data"),
     "tipo": ("tipo transacao", "tipo"),
@@ -488,13 +519,35 @@ COLUNAS_FRANCESINHA = {
     "valor": ("valor",),
 }
 
+# A Bolebarra sai no relatório "Francesinha movimento", que é
+# título por título: traz o nosso número, que amarra cada
+# recebimento ao DCB e ao GAI sem depender do valor.
+COLUNAS_MOVIMENTO = {
+    "nosso_numero": ("nosso numero",),
+    "documento": ("nº documento", "n° documento", "no documento"),
+    "vencimento": ("vencimento",),
+    "valor": ("valor",),
+    "situacao": ("situacao",),
+    "data": ("dt. liquid.", "dt liquid", "data liquidacao"),
+    "valor_liquidado": ("vl. liquid.", "vl liquid", "valor liquidacao"),
+    "nome": ("sacado", "nome contraparte", "contraparte", "nome", "cliente"),
+}
+
 TIPOS_RECEBIMENTO = ("RECEBIMENTO", "CREDITO")
+
+# Layouts conhecidos, na ordem em que são tentados. Cada um traz
+# o mapa de colunas e os campos que precisam existir para o
+# cabeçalho ser aceito.
+LAYOUTS_FRANCESINHA = (
+    ("movimento", COLUNAS_MOVIMENTO, ("nosso_numero", "valor")),
+    ("extrato", COLUNAS_FRANCESINHA, ("nome", "valor")),
+)
 
 
 def _localizar_cabecalho(linhas):
     """
     Encontra a linha de cabeçalho do relatório e devolve
-    (índice da linha, {campo: índice da coluna}).
+    (layout, índice da linha, {campo: índice da coluna}).
     """
 
     for indice_linha, linha in enumerate(linhas[:40]):
@@ -511,80 +564,157 @@ def _localizar_cabecalho(linhas):
         if not celulas:
             continue
 
-        mapa = {}
+        for layout, colunas, obrigatorios in LAYOUTS_FRANCESINHA:
 
-        for campo, apelidos in COLUNAS_FRANCESINHA.items():
+            mapa = {}
 
-            esperados = [normalizar_nome(a).lower() for a in apelidos]
+            for campo, apelidos in colunas.items():
 
-            for indice_coluna, texto in celulas.items():
-                if texto in esperados:
-                    mapa[campo] = indice_coluna
-                    break
+                esperados = [normalizar_nome(a).lower() for a in apelidos]
 
-        if "valor" in mapa and "nome" in mapa:
-            return indice_linha, mapa
+                for indice_coluna, texto in celulas.items():
+                    if texto in esperados:
+                        mapa[campo] = indice_coluna
+                        break
 
-    return None, {}
+            if all(campo in mapa for campo in obrigatorios):
+                return layout, indice_linha, mapa
+
+    return "", None, {}
 
 
 def _ler_francesinha_planilha(origem, nome=""):
     """
-    Lê o relatório "Extrato/Devolução" do Bolepix exportado pelo
-    BRB (colunas Data e Hora / Tipo Transação / Nome Contraparte
-    / Valor).
+    Lê a francesinha exportada pelo BRB, nos dois formatos:
+
+        Extrato/Devolução      Bolepix, por recebimento PIX
+        Francesinha movimento  Bolebarra, título por título
     """
 
     abas = ler_planilha(origem, nome=nome)
 
     registros = []
+    layouts = set()
 
     for nome_aba, linhas in abas.items():
 
-        indice_cabecalho, mapa = _localizar_cabecalho(linhas)
+        layout, indice_cabecalho, mapa = _localizar_cabecalho(linhas)
 
         if not mapa:
             continue
 
+        layouts.add(layout)
+
+        ler_linha = (
+            _linha_do_movimento if layout == "movimento" else _linha_do_extrato
+        )
+
         for indice_linha in range(indice_cabecalho + 1, len(linhas)):
 
-            linha = linhas[indice_linha]
+            registro = ler_linha(linhas[indice_linha], mapa)
 
-            bruto = celula(linha, mapa["valor"])
-
-            if bruto is None:
+            if registro is None:
                 continue
 
-            tipo = texto_da_celula(celula(linha, mapa.get("tipo")))
-            nome_pagador = texto_da_celula(celula(linha, mapa["nome"]))
+            registro["linha"] = indice_linha + 1
+            registro["aba"] = nome_aba
 
-            # A última linha do relatório é o total: tem valor,
-            # mas não tem contraparte nem tipo de transação.
-            if not nome_pagador and not tipo:
-                continue
+            registros.append(registro)
 
-            if tipo and normalizar_nome(tipo) not in TIPOS_RECEBIMENTO:
-                continue
+    return registros, ("movimento" if "movimento" in layouts else "extrato")
 
-            valor = moeda_para_decimal(bruto)
 
-            if valor == ZERO:
-                continue
+def _linha_do_extrato(linha, mapa):
+    """
+    Uma linha do relatório Extrato/Devolução (Bolepix).
+    """
 
-            registros.append({
-                "linha": indice_linha + 1,
-                "aba": nome_aba,
-                "data": texto_da_celula(celula(linha, mapa.get("data"))),
-                "tipo": tipo,
-                "nome": nome_pagador,
-                "nome_normalizado": normalizar_nome(nome_pagador),
-                "documento": texto_da_celula(
-                    celula(linha, mapa.get("documento"))
-                ),
-                "valor": valor,
-            })
+    bruto = celula(linha, mapa["valor"])
 
-    return registros
+    if bruto is None:
+        return None
+
+    tipo = texto_da_celula(celula(linha, mapa.get("tipo")))
+    nome_pagador = texto_da_celula(celula(linha, mapa["nome"]))
+
+    # A última linha do relatório é o total: tem valor, mas não
+    # tem contraparte nem tipo de transação.
+    if not nome_pagador and not tipo:
+        return None
+
+    if tipo and normalizar_nome(tipo) not in TIPOS_RECEBIMENTO:
+        return None
+
+    valor = moeda_para_decimal(bruto)
+
+    if valor == ZERO:
+        return None
+
+    return {
+        "data": texto_da_celula(celula(linha, mapa.get("data"))),
+        "tipo": tipo,
+        "nome": nome_pagador,
+        "nome_normalizado": normalizar_nome(nome_pagador),
+        "documento": texto_da_celula(celula(linha, mapa.get("documento"))),
+        "valor": valor,
+        "nosso_numero": "",
+        "boleto": "",
+    }
+
+
+def _linha_do_movimento(linha, mapa):
+    """
+    Uma linha do relatório Francesinha movimento (Bolebarra).
+
+    O nosso número é o crivo: as linhas de total e as anotações
+    feitas à mão depois da última cobrança não têm um, e ficam
+    de fora.
+    """
+
+    nosso_numero = re.sub(
+        r"\D", "", texto_da_celula(celula(linha, mapa["nosso_numero"]))
+    )
+
+    if len(nosso_numero) != 12:
+        return None
+
+    valor = moeda_para_decimal(celula(linha, mapa["valor"]))
+
+    if valor == ZERO:
+        return None
+
+    nome_sacado = texto_da_celula(celula(linha, mapa.get("nome")))
+
+    documento = texto_da_celula(celula(linha, mapa.get("documento")))
+
+    return {
+        "data": _somente_data(
+            texto_da_celula(celula(linha, mapa.get("data")))
+        ),
+        "tipo": texto_da_celula(celula(linha, mapa.get("situacao"))),
+        "nome": nome_sacado,
+        "nome_normalizado": normalizar_nome(nome_sacado),
+        # No movimento da Bolebarra esta coluna traz o número da
+        # alienação, que é o "seu número" do DCB.
+        "documento": "" if documento in ("0", "") else documento,
+        "valor": valor,
+        "vencimento": _somente_data(
+            texto_da_celula(celula(linha, mapa.get("vencimento")))
+        ),
+        "valor_liquidado": moeda_para_decimal(
+            celula(linha, mapa.get("valor_liquidado"))
+        ),
+        "nosso_numero": nosso_numero,
+        "boleto": boleto_do_nosso_numero(nosso_numero),
+    }
+
+
+def _somente_data(texto):
+    """
+    "30/09/2026 00:00:00" -> "30/09/2026"
+    """
+
+    return (texto or "").split(" ")[0]
 
 
 DELIMITADORES = (";", "\t", "|", ",")
@@ -656,6 +786,8 @@ def _ler_francesinha_texto(
             "nome_normalizado": normalizar_nome(partes[coluna_nome]),
             "documento": partes[coluna_documento],
             "valor": valor,
+            "nosso_numero": "",
+            "boleto": "",
         })
 
     return registros, ignoradas
@@ -670,9 +802,10 @@ def ler_francesinha(origem, delimitador=None):
     nome = nome_arquivo(origem, padrao="francesinha.xls")
 
     ignoradas = 0
+    layout = ""
 
     if e_planilha(origem, nome):
-        registros = _ler_francesinha_planilha(origem, nome=nome)
+        registros, layout = _ler_francesinha_planilha(origem, nome=nome)
         formato = "planilha"
     else:
         registros, ignoradas = _ler_francesinha_texto(
@@ -681,12 +814,23 @@ def ler_francesinha(origem, delimitador=None):
         )
         formato = "texto"
 
+    com_boleto = [r for r in registros if r.get("boleto")]
+
     return {
         "formato": formato,
+        "layout": layout,
         "registros": registros,
         "quantidade": len(registros),
         "linhas_ignoradas": ignoradas,
         "total": somar(registros),
+
+        # Quando a francesinha traz o nosso número, a
+        # conciliação deixa de depender do valor e passa a casar
+        # título por título.
+        "quantidade_com_boleto": len(com_boleto),
+        "tem_nosso_numero": len(com_boleto) == len(registros) and bool(
+            registros
+        ),
     }
 
 
@@ -746,25 +890,405 @@ def casar_por_valor(esquerda, direita):
 
 
 # ============================================================
-# 5. CONCILIAÇÃO COMPLETA
+# 5. BOLEBARRA x DCB
 # ============================================================
 
-def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
+def _indice_por_chave(registros, chave):
+    """
+    Agrupa registros por uma chave de texto, preservando a
+    ordem de cada grupo.
+    """
+
+    indice = {}
+
+    for registro in registros:
+
+        valor = registro.get(chave)
+
+        if valor:
+            indice.setdefault(valor, []).append(registro)
+
+    return indice
+
+
+def conferir_bolebarras_dcb(bolebarras, dcb):
+    """
+    Confere a francesinha Bolebarra contra o arquivo de retorno,
+    título por título, pelo nosso número.
+
+    É uma conferência mais firme que a do Bolepix: o Bolepix só
+    pode ser casado pelo valor, porque o relatório de PIX não
+    traz o nosso número. Aqui cada cobrança da francesinha tem
+    um, e ou ela aparece liquidada no DCB com o mesmo valor, ou
+    a diferença é apontada.
+
+    Devolve os quatro desencontros possíveis:
+
+        valor_divergente   está nos dois, com valores diferentes
+        sem_baixa          está na francesinha, não liquidou no DCB
+        fora_da_francesinha  liquidou no DCB, não está na francesinha
+                             (normalmente são os Bolepix do dia)
+        sem_nosso_numero   linha da francesinha sem nosso número
+    """
+
+    titulos = bolebarras["registros"]
+
+    # Um mesmo nosso número aparece mais de uma vez no retorno:
+    # uma na entrada do título e outra na liquidação. Vale a
+    # liquidação.
+    por_nosso_numero = _indice_por_chave(dcb["registros"], "nosso_numero")
+
+    casados = []
+    valor_divergente = []
+    sem_baixa = []
+    sem_nosso_numero = []
+
+    usados = set()
+
+    for titulo in titulos:
+
+        nosso_numero = titulo.get("nosso_numero")
+
+        if not nosso_numero:
+            sem_nosso_numero.append(titulo)
+            continue
+
+        encontrados = por_nosso_numero.get(nosso_numero, [])
+
+        liquidados = [r for r in encontrados if r["liquidado"]]
+
+        if not liquidados:
+            sem_baixa.append({
+                "titulo": titulo,
+                "no_arquivo": bool(encontrados),
+                "ocorrencias": [r["ocorrencia"] for r in encontrados],
+            })
+            continue
+
+        registro = liquidados[0]
+
+        usados.add(nosso_numero)
+
+        par = {
+            "titulo": titulo,
+            "registro": registro,
+            "diferenca": titulo["valor"] - registro["valor"],
+        }
+
+        if par["diferenca"] == ZERO:
+            casados.append(par)
+        else:
+            valor_divergente.append(par)
+
+    fora_da_francesinha = [
+        registro
+        for registro in dcb["liquidados"]
+        if registro["nosso_numero"] not in usados
+    ]
+
+    total_conferido = sum(
+        (par["titulo"]["valor"] for par in casados), ZERO
+    )
+
+    return {
+        "casados": casados,
+        "valor_divergente": valor_divergente,
+        "sem_baixa": sem_baixa,
+        "sem_nosso_numero": sem_nosso_numero,
+        "fora_da_francesinha": fora_da_francesinha,
+
+        "quantidade_casados": len(casados),
+        "quantidade_valor_divergente": len(valor_divergente),
+        "quantidade_sem_baixa": len(sem_baixa),
+        "quantidade_sem_nosso_numero": len(sem_nosso_numero),
+        "quantidade_fora_da_francesinha": len(fora_da_francesinha),
+
+        "total_francesinha": bolebarras["total"],
+        "total_conferido": total_conferido,
+        "total_sem_baixa": somar(
+            [item["titulo"] for item in sem_baixa]
+        ),
+        "total_fora_da_francesinha": somar(fora_da_francesinha),
+
+        "confere": not (
+            valor_divergente or sem_baixa or sem_nosso_numero
+        ),
+    }
+
+
+# ============================================================
+# 6. BOLEBARRA x RELATÓRIOS DO GAI
+# ============================================================
+
+# Por que o nosso número e não o valor: a Relação de Parcelas
+# Lidas quebra um boleto nas parcelas que ele pagou, então o
+# valor de uma linha do relatório quase nunca é o valor da
+# cobrança. Somadas por boleto, as parcelas fecham com o valor
+# da francesinha — e o boleto é justamente o que o GAI imprime
+# como nosso número.
+
+SITUACAO_BAIXADO = "baixado"
+SITUACAO_LIDO_SEM_BAIXA = "lido_sem_baixa"
+SITUACAO_RECUSADO = "recusado"
+SITUACAO_AUSENTE = "ausente"
+
+EXPLICACAO_SITUACAO = {
+    SITUACAO_LIDO_SEM_BAIXA: (
+        "O GAI leu o pagamento e registrou valor 0,00 na Relação de "
+        "Parcelas Lidas: a baixa não foi aplicada."
+    ),
+    SITUACAO_RECUSADO: (
+        "O GAI recusou a baixa e informou o motivo no relatório de "
+        "Baixas de Pagamentos Não Efetivadas."
+    ),
+    SITUACAO_AUSENTE: (
+        "A cobrança não aparece em nenhum dos dois relatórios do GAI. "
+        "Em geral é cobrança de outra gerência (GIR, GGR, GOP), que "
+        "não passa pelo GAI."
+    ),
+}
+
+
+def conferir_bolebarras_gai(bolebarras, lidas=None, nao_efetivadas=None):
+    """
+    Confere a francesinha Bolebarra contra os relatórios do GAI
+    e diz, cobrança por cobrança, o que o GAI fez com ela.
+
+    Cada cobrança cai em uma de quatro situações:
+
+        baixado          o GAI baixou, e o valor fecha
+        lido_sem_baixa   o GAI leu e registrou 0,00
+        recusado         o GAI recusou, com motivo
+        ausente          não está em nenhum relatório do GAI
+
+    Aponta também o caminho inverso: os boletos que o GAI baixou
+    e não estão na francesinha Bolebarra — que são, no dia a
+    dia, os recebimentos do Bolepix.
+    """
+
+    titulos = bolebarras["registros"]
+
+    boletos_baixados = {}
+    lidos_sem_baixa = {}
+
+    if lidas is not None:
+        boletos_baixados = {
+            grupo["boleto"]: grupo for grupo in lidas["boletos"]
+        }
+
+        for registro in lidas["lidos_sem_baixa"]:
+            lidos_sem_baixa.setdefault(registro["boleto"], registro)
+
+    recusados = {}
+
+    if nao_efetivadas is not None:
+        for registro in nao_efetivadas["registros"]:
+            recusados.setdefault(registro["boleto"], registro)
+
+    linhas = []
+    usados = set()
+
+    for titulo in titulos:
+
+        boleto = titulo.get("boleto")
+
+        grupo = boletos_baixados.get(boleto) if boleto else None
+
+        if grupo is not None:
+            usados.add(boleto)
+
+            linhas.append({
+                "titulo": titulo,
+                "situacao": SITUACAO_BAIXADO,
+                "valor_gai": grupo["valor"],
+                "diferenca": titulo["valor"] - grupo["valor"],
+                "alienacao": grupo["alienacao"],
+                "quantidade_parcelas": len(grupo["parcelas"]),
+                "motivo": "",
+            })
+
+            continue
+
+        recusa = recusados.get(boleto) if boleto else None
+
+        if boleto and boleto in lidos_sem_baixa:
+            situacao = SITUACAO_LIDO_SEM_BAIXA
+        elif recusa is not None:
+            situacao = SITUACAO_RECUSADO
+        else:
+            situacao = SITUACAO_AUSENTE
+
+        linhas.append({
+            "titulo": titulo,
+            "situacao": situacao,
+            "valor_gai": ZERO,
+            "diferenca": titulo["valor"],
+            "alienacao": (
+                (recusa or lidos_sem_baixa.get(boleto) or {}).get("alienacao")
+                or titulo.get("documento")
+                or ""
+            ),
+            "quantidade_parcelas": 0,
+            "motivo": (recusa or {}).get("motivo", ""),
+        })
+
+    def por_situacao(situacao):
+        return [linha for linha in linhas if linha["situacao"] == situacao]
+
+    baixados = por_situacao(SITUACAO_BAIXADO)
+
+    # Um boleto que o GAI baixou por um valor diferente do que a
+    # francesinha recebeu é um caso à parte: o dinheiro entrou,
+    # mas a baixa saiu torta.
+    valor_divergente = [
+        linha for linha in baixados if linha["diferenca"] != ZERO
+    ]
+
+    nao_baixados = [
+        linha for linha in linhas if linha["situacao"] != SITUACAO_BAIXADO
+    ]
+
+    fora_da_francesinha = [
+        grupo
+        for grupo in boletos_baixados.values()
+        if grupo["boleto"] not in usados
+    ]
+
+    def total(colecao, chave="valor"):
+        return sum((item[chave] for item in colecao), ZERO)
+
+    total_baixado = sum(
+        (linha["titulo"]["valor"] for linha in baixados), ZERO
+    )
+
+    return {
+        "linhas": linhas,
+        "baixados": baixados,
+        "valor_divergente": valor_divergente,
+        "nao_baixados": nao_baixados,
+        "fora_da_francesinha": fora_da_francesinha,
+
+        "quantidade_baixados": len(baixados),
+        "quantidade_valor_divergente": len(valor_divergente),
+        "quantidade_nao_baixados": len(nao_baixados),
+        "quantidade_fora_da_francesinha": len(fora_da_francesinha),
+
+        "total_francesinha": bolebarras["total"],
+        "total_baixado": total_baixado,
+        "total_nao_baixado": sum(
+            (linha["titulo"]["valor"] for linha in nao_baixados), ZERO
+        ),
+        "total_fora_da_francesinha": total(fora_da_francesinha),
+
+        "situacoes": [
+            {
+                "situacao": situacao,
+                "quantidade": len(por_situacao(situacao)),
+                "total": sum(
+                    (
+                        linha["titulo"]["valor"]
+                        for linha in por_situacao(situacao)
+                    ),
+                    ZERO,
+                ),
+                "explicacao": EXPLICACAO_SITUACAO.get(situacao, ""),
+            }
+            for situacao in (
+                SITUACAO_LIDO_SEM_BAIXA,
+                SITUACAO_RECUSADO,
+                SITUACAO_AUSENTE,
+            )
+            if por_situacao(situacao)
+        ],
+
+        "confere": not nao_baixados and not valor_divergente,
+    }
+
+
+# ============================================================
+# 7. CONCILIAÇÃO COMPLETA
+# ============================================================
+
+def _ler_relatorios_gai(lidas, nao_baixadas, avisos):
+    """
+    Lê os dois PDFs do GAI, sem exigir que venham no campo
+    certo: cada relatório se identifica pelo título impresso na
+    primeira página, então trocar um pelo outro na tela não
+    muda o resultado.
+    """
+
+    import gai
+
+    encontrados = {}
+
+    for campo, origem in (
+        ("Parcelas lidas", lidas),
+        ("Baixas não efetivadas", nao_baixadas),
+    ):
+        if origem is None:
+            continue
+
+        if not gai.e_pdf(origem):
+            avisos.append(
+                f"O arquivo enviado no campo {campo} do GAI não é um "
+                "PDF. Os dois relatórios do GAI são PDF."
+            )
+            continue
+
+        try:
+            relatorio = gai.ler_relatorio_gai(origem)
+        except Exception as erro:
+            avisos.append(
+                f"Não foi possível ler o PDF enviado no campo {campo} "
+                f"do GAI: {erro}"
+            )
+            continue
+
+        if relatorio["tipo"] in encontrados:
+            avisos.append(
+                "Os dois PDFs enviados são o mesmo relatório do GAI; "
+                "o segundo foi ignorado."
+            )
+            continue
+
+        encontrados[relatorio["tipo"]] = relatorio
+
+    return (
+        encontrados.get("parcelas_lidas"),
+        encontrados.get("baixas_nao_efetivadas"),
+    )
+
+def conciliar(
+    extrato=None,
+    dcb=None,
+    francesinha=None,
+    bolebarras=None,
+    gai_lidas=None,
+    gai_nao_baixadas=None,
+):
     """
     Executa a conciliação com os arquivos disponíveis.
 
     Todos os arquivos são opcionais: o que for enviado é
-    processado, o que faltar é omitido do resultado.
+    processado, o que faltar é omitido do resultado. Em
+    particular, a conciliação da Bolebarra com o DCB e com o GAI
+    não depende do extrato — o extrato serve para fechar os
+    totais do dia, não para casar título por título.
 
     Devolve um dicionário com os blocos:
 
-        extrato        totais do extrato BRB
-        francesinha    detalhe dos PIX recebidos (Bolepix)
-        bolebarras     detalhe da cobrança por código de barras
-        dcb            títulos do arquivo de retorno
-        pix_detalhado  PIX do extrato com o nome do pagador
-        divergencia    Total pagamentos - Total retorno
-        avisos         pontos de atenção para o usuário
+        extrato         totais do extrato BRB
+        francesinha     detalhe dos PIX recebidos (Bolepix)
+        bolebarras      detalhe da cobrança por código de barras
+        dcb             títulos do arquivo de retorno
+        gai_lidas       Relação de Parcelas Lidas do GAI
+        gai_nao_baixadas  Baixas Não Efetivadas do GAI
+        pix_detalhado   PIX do extrato com o nome do pagador
+        bolepix_dcb     Bolepix sem baixa no arquivo de retorno
+        bolebarras_dcb  Bolebarra conferida com o DCB
+        bolebarras_gai  Bolebarra conferida com os relatórios do GAI
+        divergencia     Total pagamentos - Total retorno
+        avisos          pontos de atenção para o usuário
     """
 
     avisos = []
@@ -774,7 +1298,13 @@ def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
         "francesinha": None,
         "bolebarras": None,
         "dcb": None,
+        "gai_lidas": None,
+        "gai_nao_baixadas": None,
         "pix_detalhado": None,
+        "bolepix_dcb": None,
+        "bolepix_gai": None,
+        "bolebarras_dcb": None,
+        "bolebarras_gai": None,
         "divergencia": None,
         "avisos": avisos,
     }
@@ -833,10 +1363,27 @@ def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
 
     # ---------- 3. francesinha bolebarras (opcional) ----------
 
+    dados_bolebarras = None
+
     if bolebarras is not None:
 
         dados_bolebarras = ler_francesinha(bolebarras)
         resultado["bolebarras"] = dados_bolebarras
+
+        if not dados_bolebarras["registros"]:
+            avisos.append(
+                "Nenhuma cobrança foi lida na francesinha Bolebarra. "
+                "Confirme se o arquivo é o relatório Francesinha "
+                "movimento exportado pelo BRB."
+            )
+
+        elif not dados_bolebarras["tem_nosso_numero"]:
+            avisos.append(
+                f"{dados_bolebarras['quantidade'] - dados_bolebarras['quantidade_com_boleto']}"
+                " cobrança(s) da francesinha Bolebarra estão sem nosso "
+                "número: essas não podem ser casadas com o DCB nem com "
+                "o GAI título por título."
+            )
 
         if dados_extrato is not None:
 
@@ -873,7 +1420,34 @@ def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
                 "é o retorno da cobrança (CNAB 400) do BRB."
             )
 
-    # ---------- 5. PIX do extrato com nome do pagador ----------
+    # ---------- 5. relatórios do GAI ----------
+
+    dados_lidas, dados_nao_baixadas = _ler_relatorios_gai(
+        gai_lidas, gai_nao_baixadas, avisos
+    )
+
+    resultado["gai_lidas"] = dados_lidas
+    resultado["gai_nao_baixadas"] = dados_nao_baixadas
+
+    for relatorio in (dados_lidas, dados_nao_baixadas):
+        if relatorio is not None:
+            avisos.extend(relatorio["avisos"])
+
+    if dados_lidas is not None and dados_dcb is not None:
+
+        esperado = (dados_lidas["arquivo"] or "").upper()
+        recebido = (nome_arquivo(dcb, padrao="") or "").upper()
+
+        # O relatório do GAI diz de qual arquivo de retorno ele
+        # saiu. Conferir evita conciliar o dia errado.
+        if esperado and recebido and not recebido.endswith(esperado):
+            avisos.append(
+                "A Relação de Parcelas Lidas do GAI foi gerada a partir "
+                f"de {dados_lidas['arquivo']}, que não é o DCB enviado. "
+                "Confirme se os arquivos são do mesmo dia."
+            )
+
+    # ---------- 6. PIX do extrato com nome do pagador ----------
 
     # A planilha manual preenche à mão as colunas Cliente /
     # CPF / Data-Hora do pagamento. Aqui isso é feito casando o
@@ -919,7 +1493,119 @@ def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
             "pix_sem_credito_no_extrato": pix_sem_extrato,
         }
 
-    # ---------- 6. divergência ----------
+    # ---------- 7. Bolepix x DCB ----------
+
+    # Quais PIX recebidos não têm título liquidado no arquivo de
+    # retorno. O Bolepix só pode ser casado pelo valor: o
+    # relatório de PIX do banco não traz nosso número.
+    #
+    # Não depende do extrato — o extrato só entra depois, para
+    # fechar o total do dia.
+    nao_baixados = []
+
+    if dados_francesinha is not None and dados_dcb is not None:
+
+        _, nao_baixados, _ = casar_por_valor(
+            dados_francesinha["registros"],
+            dados_dcb["liquidados"],
+        )
+
+        resultado["bolepix_dcb"] = {
+            "total_francesinha": dados_francesinha["total"],
+            "nao_baixados": nao_baixados,
+            "quantidade_nao_baixados": len(nao_baixados),
+            "total_nao_baixados": somar(nao_baixados),
+            "confere": not nao_baixados,
+        }
+
+    # ---------- 8. Bolebarra x DCB ----------
+
+    if dados_bolebarras is not None and dados_dcb is not None:
+
+        conferencia = conferir_bolebarras_dcb(dados_bolebarras, dados_dcb)
+
+        resultado["bolebarras_dcb"] = conferencia
+
+        if conferencia["valor_divergente"]:
+            avisos.append(
+                f"{conferencia['quantidade_valor_divergente']} cobrança(s) "
+                "da francesinha Bolebarra estão no arquivo de retorno com "
+                "valor diferente."
+            )
+
+        if conferencia["sem_baixa"]:
+            avisos.append(
+                f"{conferencia['quantidade_sem_baixa']} cobrança(s) da "
+                "francesinha Bolebarra não têm título liquidado no "
+                "arquivo de retorno "
+                f"({formatar_moeda(conferencia['total_sem_baixa'])})."
+            )
+
+    # ---------- 9. Bolebarra x GAI ----------
+
+    if dados_bolebarras is not None and (
+        dados_lidas is not None or dados_nao_baixadas is not None
+    ):
+        conferencia = conferir_bolebarras_gai(
+            dados_bolebarras,
+            lidas=dados_lidas,
+            nao_efetivadas=dados_nao_baixadas,
+        )
+
+        resultado["bolebarras_gai"] = conferencia
+
+        if dados_lidas is None:
+            avisos.append(
+                "Sem a Relação de Parcelas Lidas do GAI não é possível "
+                "dizer o que o GAI baixou; envie também esse PDF."
+            )
+
+        elif conferencia["nao_baixados"]:
+            avisos.append(
+                f"{conferencia['quantidade_nao_baixados']} cobrança(s) da "
+                "francesinha Bolebarra não foram baixadas no GAI "
+                f"({formatar_moeda(conferencia['total_nao_baixado'])})."
+            )
+
+        if conferencia["valor_divergente"]:
+            avisos.append(
+                f"{conferencia['quantidade_valor_divergente']} cobrança(s) "
+                "foram baixadas no GAI por valor diferente do recebido."
+            )
+
+    # ---------- 10. Bolepix x GAI ----------
+
+    # Os boletos que o GAI baixou e não estão na francesinha
+    # Bolebarra são, no dia a dia, os recebimentos do Bolepix.
+    # Comparados com a francesinha Bolepix, mostram quanto do
+    # PIX do dia o GAI deixou de baixar.
+    if (
+        resultado["bolebarras_gai"] is not None
+        and dados_francesinha is not None
+        and dados_lidas is not None
+    ):
+        do_gai = [
+            dict(grupo, nome="", data="")
+            for grupo in resultado["bolebarras_gai"]["fora_da_francesinha"]
+        ]
+
+        _, pix_sem_gai, gai_sem_pix = casar_por_valor(
+            dados_francesinha["registros"],
+            do_gai,
+        )
+
+        resultado["bolepix_gai"] = {
+            "total_francesinha": dados_francesinha["total"],
+            "total_no_gai": somar(do_gai),
+            "nao_baixados": pix_sem_gai,
+            "quantidade_nao_baixados": len(pix_sem_gai),
+            "total_nao_baixados": somar(pix_sem_gai),
+            "boletos_sem_pix": gai_sem_pix,
+            "quantidade_boletos_sem_pix": len(gai_sem_pix),
+            "confere": not pix_sem_gai and not gai_sem_pix,
+        }
+
+    # ---------- 11. divergência do dia ----------
 
     if dados_extrato is not None and dados_dcb is not None:
 
@@ -927,17 +1613,6 @@ def conciliar(extrato=None, dcb=None, francesinha=None, bolebarras=None):
         total_retorno = dados_dcb["total_liquidado"]
 
         divergencia = total_pagamentos - total_retorno
-
-        # Identifica, item a item, os PIX que entraram na conta
-        # mas não têm título liquidado no arquivo de retorno.
-        nao_baixados = []
-
-        if dados_francesinha is not None:
-
-            _, nao_baixados, _ = casar_por_valor(
-                dados_francesinha["registros"],
-                dados_dcb["liquidados"],
-            )
 
         resultado["divergencia"] = {
             "total_pagamentos": total_pagamentos,

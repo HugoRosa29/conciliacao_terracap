@@ -25,13 +25,13 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependências do núcleo
-        run: pip install xlrd==2.0.2 openpyxl==3.1.5 XlsxWriter==3.2.9
+        run: pip install xlrd==2.0.2 openpyxl==3.1.5 XlsxWriter==3.2.9 pypdf==6.19.0
 
       - name: Conferir se docs/py está em dia com o núcleo
         run: python build.py --verificar
 
       - name: Importar os módulos do núcleo
-        run: python -c "import conciliacao, planilhas, exportar, ponte"
+        run: python -c "import conciliacao, planilhas, gai, exportar, ponte"
 
   publicar:
     needs: verificar

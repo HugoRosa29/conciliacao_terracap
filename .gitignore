@@ -4,12 +4,17 @@
 # código do projeto (o Git no Windows ignora maiúsculas).
 *.ret
 DCB_*.txt
+*.xlt
 *.xlt.xls
 Francesinha*.xls
 Francesinha*.xlsx
 Planilha*.xls
 Planilha*.xlsx
 conciliacao_*.xlsx
+
+# Relatórios do GAI. O projeto não versiona PDF nenhum, e os do
+# GAI trazem nome, alienação e valor de cada comprador.
+*.pdf
 
 __pycache__/
 *.py[cod]

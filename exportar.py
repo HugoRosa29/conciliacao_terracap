@@ -11,13 +11,28 @@ from io import BytesIO
 
 AZUL = "#1f3864"
 
+# Abas geradas, na ordem. Cada uma só aparece se os arquivos
+# dela foram enviados.
 ABAS = (
     "Resumo",
+    "Bolebarra x GAI",
+    "Bolebarra nao baixada",
+    "Bolebarra x DCB",
+    "GAI nao efetivadas",
     "PIX detalhado",
     "Bolepix nao baixado",
     "DCB liquidados",
     "Extrato creditos",
 )
+
+# Como cada situação da conferência com o GAI aparece na
+# planilha.
+SITUACAO_GAI = {
+    "baixado": "Baixado no GAI",
+    "lido_sem_baixa": "Lido pelo GAI com valor 0,00",
+    "recusado": "Recusado pelo GAI",
+    "ausente": "Fora dos relatorios do GAI",
+}
 
 
 def _valor(celula):
@@ -105,6 +120,11 @@ def montar_planilha(resultado):
     dcb = resultado.get("dcb")
     divergencia = resultado.get("divergencia")
     detalhado = resultado.get("pix_detalhado")
+    lidas = resultado.get("gai_lidas")
+    nao_efetivadas = resultado.get("gai_nao_baixadas")
+    com_dcb = resultado.get("bolebarras_dcb")
+    com_gai = resultado.get("bolebarras_gai")
+    bolepix_dcb = resultado.get("bolepix_dcb")
 
     buffer = BytesIO()
 
@@ -179,6 +199,101 @@ def montar_planilha(resultado):
             ["", "", ""],
         ]
 
+    if com_dcb is not None:
+        resumo += [
+            ["Bolebarra x DCB", "", ""],
+            [
+                "Cobranças conferidas título por título",
+                com_dcb["quantidade_casados"],
+                com_dcb["total_conferido"],
+            ],
+            [
+                "Cobranças com valor diferente no DCB",
+                com_dcb["quantidade_valor_divergente"],
+                "",
+            ],
+            [
+                "Cobranças sem baixa no DCB",
+                com_dcb["quantidade_sem_baixa"],
+                com_dcb["total_sem_baixa"],
+            ],
+            [
+                "Liquidados no DCB fora da Bolebarra (Bolepix)",
+                com_dcb["quantidade_fora_da_francesinha"],
+                com_dcb["total_fora_da_francesinha"],
+            ],
+            ["", "", ""],
+        ]
+
+    if lidas is not None:
+        resumo += [
+            ["GAI - Relação de Parcelas Lidas", "", ""],
+            [
+                "Boletos baixados no GAI",
+                lidas["quantidade_boletos"],
+                lidas["total_baixado"],
+            ],
+            [
+                "Boletos lidos com valor 0,00",
+                lidas["quantidade_lidos_sem_baixa"],
+                "",
+            ],
+            ["", "", ""],
+        ]
+
+    if nao_efetivadas is not None:
+        resumo += [
+            ["GAI - Baixas de Pagamentos Não Efetivadas", "", ""],
+            [
+                "Registros recusados",
+                nao_efetivadas["quantidade"],
+                nao_efetivadas["total"],
+            ],
+            ["", "", ""],
+        ]
+
+    if com_gai is not None:
+        resumo += [
+            ["Bolebarra x GAI", "", ""],
+            [
+                "Cobranças baixadas no GAI",
+                com_gai["quantidade_baixados"],
+                com_gai["total_baixado"],
+            ],
+            [
+                "Cobranças NÃO baixadas no GAI",
+                com_gai["quantidade_nao_baixados"],
+                com_gai["total_nao_baixado"],
+            ],
+        ]
+
+        for situacao in com_gai["situacoes"]:
+            resumo.append([
+                f"   {SITUACAO_GAI.get(situacao['situacao'], situacao['situacao'])}",
+                situacao["quantidade"],
+                situacao["total"],
+            ])
+
+        resumo += [
+            [
+                "Baixados no GAI fora da Bolebarra (Bolepix)",
+                com_gai["quantidade_fora_da_francesinha"],
+                com_gai["total_fora_da_francesinha"],
+            ],
+            ["", "", ""],
+        ]
+
+    if bolepix_dcb is not None:
+        resumo += [
+            ["Bolepix x DCB", "", ""],
+            [
+                "Bolepix sem baixa no arquivo de retorno",
+                bolepix_dcb["quantidade_nao_baixados"],
+                bolepix_dcb["total_nao_baixados"],
+            ],
+            ["", "", ""],
+        ]
+
     if divergencia is not None:
         resumo += [
             ["Divergência", "", ""],
@@ -202,6 +317,151 @@ def montar_planilha(resultado):
         resumo or [["Sem dados", "", ""]],
         colunas_moeda={2},
     )
+
+    # ---------- Bolebarra x GAI ----------
+
+    if com_gai is not None:
+
+        colunas_gai = [
+            "Nosso número",
+            "Boleto (GAI)",
+            "Alienação",
+            "Sacado",
+            "Dt. liquidação",
+            "Valor recebido",
+            "Valor baixado no GAI",
+            "Diferença",
+            "Situação",
+            "Motivo informado pelo GAI",
+        ]
+
+        def linha_gai(linha):
+            titulo = linha["titulo"]
+
+            return [
+                titulo["nosso_numero"],
+                titulo["boleto"],
+                linha["alienacao"],
+                titulo["nome"],
+                titulo["data"],
+                titulo["valor"],
+                linha["valor_gai"],
+                linha["diferenca"],
+                SITUACAO_GAI.get(linha["situacao"], linha["situacao"]),
+                linha["motivo"],
+            ]
+
+        _escrever_aba(
+            livro,
+            "Bolebarra x GAI",
+            colunas_gai,
+            [linha_gai(linha) for linha in com_gai["linhas"]],
+            colunas_moeda={5, 6, 7},
+        )
+
+        # A aba que o usuário abre primeiro: só o que não fechou.
+        _escrever_aba(
+            livro,
+            "Bolebarra nao baixada",
+            colunas_gai,
+            [
+                linha_gai(linha)
+                for linha in com_gai["nao_baixados"]
+                + com_gai["valor_divergente"]
+            ],
+            colunas_moeda={5, 6, 7},
+        )
+
+    # ---------- Bolebarra x DCB ----------
+
+    if com_dcb is not None:
+
+        linhas_dcb = []
+
+        for par in com_dcb["casados"] + com_dcb["valor_divergente"]:
+            linhas_dcb.append([
+                par["titulo"]["nosso_numero"],
+                par["titulo"]["nome"],
+                par["titulo"]["data"],
+                par["titulo"]["valor"],
+                par["registro"]["valor"],
+                par["diferenca"],
+                par["registro"]["ocorrencia"],
+                par["registro"]["ocorrencia_descricao"],
+            ])
+
+        for item in com_dcb["sem_baixa"]:
+            linhas_dcb.append([
+                item["titulo"]["nosso_numero"],
+                item["titulo"]["nome"],
+                item["titulo"]["data"],
+                item["titulo"]["valor"],
+                "",
+                item["titulo"]["valor"],
+                ", ".join(item["ocorrencias"]),
+                "Sem título liquidado no arquivo de retorno",
+            ])
+
+        for registro in com_dcb["fora_da_francesinha"]:
+            linhas_dcb.append([
+                registro["nosso_numero"],
+                "",
+                registro["data_ocorrencia"],
+                "",
+                registro["valor"],
+                -registro["valor"],
+                registro["ocorrencia"],
+                "Liquidado no DCB, fora da francesinha Bolebarra",
+            ])
+
+        _escrever_aba(
+            livro,
+            "Bolebarra x DCB",
+            [
+                "Nosso número",
+                "Sacado",
+                "Dt. liquidação",
+                "Valor na francesinha",
+                "Valor pago no DCB",
+                "Diferença",
+                "Ocorrência",
+                "Situação",
+            ],
+            linhas_dcb,
+            colunas_moeda={3, 4, 5},
+        )
+
+    # ---------- GAI: baixas não efetivadas ----------
+
+    if nao_efetivadas is not None:
+        _escrever_aba(
+            livro,
+            "GAI nao efetivadas",
+            [
+                "Alienação",
+                "Boleto",
+                "Agência",
+                "Parcela",
+                "Data pagamento",
+                "Data vencimento",
+                "Total pago",
+                "Motivo",
+            ],
+            [
+                [
+                    registro["alienacao"],
+                    registro["boleto"],
+                    registro["agencia"],
+                    registro["parcela"],
+                    registro["data_pagamento"],
+                    registro["data_vencimento"],
+                    registro["total_pago"],
+                    registro["motivo"],
+                ]
+                for registro in nao_efetivadas["registros"]
+            ],
+            colunas_moeda={6},
+        )
 
     # ---------- PIX detalhado ----------
 
@@ -233,14 +493,16 @@ def montar_planilha(resultado):
 
     # ---------- Bolepix não baixado ----------
 
-    if divergencia is not None:
+    # Não depende do extrato: basta a francesinha Bolepix e o
+    # arquivo de retorno.
+    if bolepix_dcb is not None:
         _escrever_aba(
             livro,
             "Bolepix nao baixado",
             ["Data/Hora Pagamento", "Cliente / Contraparte", "Valor"],
             [
                 [registro["data"], registro["nome"], registro["valor"]]
-                for registro in divergencia["nao_baixados"]
+                for registro in bolepix_dcb["nao_baixados"]
             ],
             colunas_moeda={2},
         )

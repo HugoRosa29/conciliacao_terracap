@@ -678,6 +678,27 @@ button.secundario:hover:not(:disabled) {
 
 .satelite .selo.ok { border-left-color: #4FBF88; }
 
+/* Duas contas podem conviver no satélite: a da Bolebarra com o
+   GAI, que não depende do extrato, e a divergência do dia. */
+.satelite .conta + .conta {
+  margin-top: 34px;
+  padding-top: 30px;
+  border-top: 1px solid rgba(255, 255, 255, .22);
+}
+
+.satelite .motivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.satelite .motivos strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ------------------------------------------------------------
    Avisos
    ------------------------------------------------------------ */
@@ -777,11 +798,30 @@ td.numero, th.numero {
   white-space: nowrap;
 }
 
+/* Carimbo de situação dentro da tabela: menor que o do topo da
+   página, para não competir com os valores. */
+tbody td .carimbo {
+  padding: 3px 9px;
+  font-size: .62rem;
+  letter-spacing: .05em;
+}
+
 .vazio {
   padding: 30px;
   text-align: center;
   color: var(--texto-fraco);
   font-size: .9rem;
+}
+
+/* Observação de pé de tabela e nota da área de entrada: mesma
+   voz, ao lado do que explicam. */
+.nota-tabela,
+.nota-entrada {
+  margin: 14px 0 0;
+  font-size: .86rem;
+  line-height: 1.6;
+  color: var(--texto-fraco);
+  max-width: 76ch;
 }
 
 .pendente {
