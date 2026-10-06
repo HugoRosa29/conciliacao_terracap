@@ -199,10 +199,36 @@ def cruzar_sistemas(relatorios, dcb=None, bolebarras=None, gai_lidas=None):
         for r in gai_lidas['parcelas']:
             if r['valor'] > ZERO:
                 baixas[(r['boleto'].zfill(6), r['data_pagamento'])]['GAI'].append(r)
+    # O GAI pode baixar parcelas de alienações diferentes em um único
+    # boleto. Quando o número do boleto não fecha, a parcela é
+    # procurada pela alienação (documento), data e valor.
+    gai_por_alienacao = defaultdict(list)
+    if gai_lidas:
+        for r in gai_lidas['parcelas']:
+            if r['valor'] > ZERO:
+                gai_por_alienacao[(r.get('alienacao', ''), r['data_pagamento'], r['valor'])].append(r)
+
+    def parcelas_da_alienacao(titulos, data):
+        achadas = []
+        for t in titulos:
+            alienacao = (t.get('documento') or '').strip()
+            candidatas = gai_por_alienacao.get((alienacao, data, t['valor'])) if alienacao else None
+            if not candidatas:
+                return []
+            achadas.append(candidatas[0])
+        return achadas
+
     linhas = []
     for chave, titulos in _indice(bolebarras['registros'], 'data').items():
         sistemas = baixas.get(chave, {})
         valor = sum((r['valor'] for r in titulos), ZERO)
+        if not sistemas or (
+            list(sistemas) == ['GAI']
+            and sum((r['valor'] for r in sistemas['GAI']), ZERO) != valor
+        ):
+            achadas = parcelas_da_alienacao(titulos, chave[1])
+            if achadas:
+                sistemas = {'GAI': achadas}
         valor_sistemas = sum((r['valor'] for itens in sistemas.values() for r in itens), ZERO)
         if len(sistemas) > 1 or len({r['nosso_numero'] for r in titulos}) > 1:
             situacao = 'Identificação ambígua'

@@ -1178,6 +1178,32 @@ def conferir_bolebarras_gai(bolebarras, lidas=None, nao_efetivadas=None):
         for registro in nao_efetivadas["registros"]:
             recusados.setdefault(registro["boleto"], registro)
 
+    # O GAI às vezes baixa várias parcelas, de alienações
+    # diferentes, em um único boleto. Quando o número do boleto da
+    # francesinha não fecha com o do GAI, a parcela é procurada
+    # pela alienação e pelo valor.
+    parcelas_do_gai = lidas["parcelas"] if lidas is not None else []
+    parcelas_usadas = set()
+
+    def parcela_por_alienacao(titulo, grupo=None):
+        alienacao = (titulo.get("documento") or "").strip()
+
+        if not alienacao:
+            return None
+
+        candidatas = grupo["parcelas"] if grupo else parcelas_do_gai
+
+        for parcela in candidatas:
+            if (
+                id(parcela) not in parcelas_usadas
+                and parcela["alienacao"] == alienacao
+                and parcela["valor"] == titulo["valor"]
+                and parcela["boleto"] in boletos_baixados
+            ):
+                return parcela
+
+        return None
+
     linhas = []
     usados = set()
 
@@ -1186,6 +1212,33 @@ def conferir_bolebarras_gai(bolebarras, lidas=None, nao_efetivadas=None):
         boleto = titulo.get("boleto")
 
         grupo = boletos_baixados.get(boleto) if boleto else None
+
+        # Boleto agrupado: o valor do GAI vale para o conjunto, mas
+        # a cobrança é só a parcela da sua alienação.
+        parcela = None
+
+        if grupo is not None and grupo["valor"] != titulo["valor"]:
+            parcela = parcela_por_alienacao(titulo, grupo)
+        elif grupo is None:
+            parcela = parcela_por_alienacao(titulo)
+
+        if parcela is not None:
+            parcelas_usadas.add(id(parcela))
+            usados.add(parcela["boleto"])
+
+            linhas.append({
+                "titulo": titulo,
+                "situacao": SITUACAO_BAIXADO,
+                "valor_gai": parcela["valor"],
+                "diferenca": ZERO,
+                "alienacao": parcela["alienacao"],
+                "quantidade_parcelas": 1,
+                "motivo": (
+                    f"baixado junto com o boleto {parcela['boleto']}"
+                ),
+            })
+
+            continue
 
         if grupo is not None:
             usados.add(boleto)
@@ -1716,6 +1769,21 @@ def conciliar(
 
         divergencia = total_pagamentos - total_retorno
 
+        # Liquidações do DCB que não estão na Bolebarra e também
+        # não têm PIX na francesinha Bolepix: entraram no retorno
+        # sem entrada correspondente no extrato.
+        dcb_sem_francesinha = []
+
+        if dados_francesinha is not None and resultado["bolebarras_dcb"]:
+            _, _, dcb_sem_francesinha = casar_por_valor(
+                dados_francesinha["registros"],
+                resultado["bolebarras_dcb"]["fora_da_francesinha"],
+            )
+
+        # extrato - retorno = Bolepix sem baixa - liquidações sem
+        # francesinha
+        efeito = somar(nao_baixados) - somar(dcb_sem_francesinha)
+
         resultado["divergencia"] = {
             "total_pagamentos": total_pagamentos,
             "total_retorno": total_retorno,
@@ -1725,8 +1793,12 @@ def conciliar(
             "quantidade_nao_baixados": len(nao_baixados),
             "total_nao_baixados": somar(nao_baixados),
 
+            "dcb_sem_francesinha": dcb_sem_francesinha,
+            "quantidade_dcb_sem_francesinha": len(dcb_sem_francesinha),
+            "total_dcb_sem_francesinha": somar(dcb_sem_francesinha),
+
             "explicada": (
-                somar(nao_baixados) == divergencia
+                efeito == divergencia
                 if dados_francesinha is not None
                 else None
             ),
@@ -1737,8 +1809,15 @@ def conciliar(
         ]["explicada"]:
             avisos.append(
                 "A divergência não foi totalmente explicada pelos "
-                "Bolepix não baixados. Verifique também a cobrança "
+                "Bolepix não baixados e pelas liquidações do DCB sem "
+                "francesinha. Verifique também a cobrança "
                 "por código de barras."
+            )
+        elif dcb_sem_francesinha:
+            avisos.append(
+                f"{len(dcb_sem_francesinha)} liquidação(ões) do DCB "
+                "sem francesinha Bolebarra nem Bolepix "
+                f"({formatar_moeda(somar(dcb_sem_francesinha))})."
             )
 
     from sistemas import ler_sistema, cruzar_sistemas

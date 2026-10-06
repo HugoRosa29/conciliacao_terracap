@@ -465,16 +465,35 @@ def gerar_relatorio(resultado):
 
         if divergencia["nao_baixados"]:
             linha(
-                "Explicada por Bolepix não baixado "
+                "Bolepix não baixado "
                 f"({divergencia['quantidade_nao_baixados']})",
-                formatar_moeda(divergencia["total_nao_baixados"])
-                + ("  OK" if divergencia["explicada"] else "  !!"),
+                formatar_moeda(divergencia["total_nao_baixados"]),
+            )
+
+        if divergencia["dcb_sem_francesinha"]:
+            linha(
+                "Liquidado no DCB sem francesinha "
+                f"({divergencia['quantidade_dcb_sem_francesinha']})",
+                formatar_moeda(-divergencia["total_dcb_sem_francesinha"]),
+            )
+
+            for registro in divergencia["dcb_sem_francesinha"]:
+                print(
+                    f"    nosso número {registro['nosso_numero']}"
+                    f"   alienação {registro['seu_numero']:<8}"
+                    f"{formatar_moeda(registro['valor']):>16}"
+                )
+
+        if divergencia["nao_baixados"] or divergencia["dcb_sem_francesinha"]:
+            print(
+                "  Explicada pelos itens acima".ljust(46)
+                + ("OK" if divergencia["explicada"] else "!!").rjust(23)
             )
 
             if not divergencia["explicada"]:
                 print(
-                    "\n  ATENÇÃO: os Bolepix não baixados não explicam "
-                    "toda a divergência. Veja a conferência da Bolebarra."
+                    "\n  ATENÇÃO: os itens acima não explicam toda a "
+                    "divergência. Veja a conferência da Bolebarra."
                 )
 
     if detalhado is not None:
